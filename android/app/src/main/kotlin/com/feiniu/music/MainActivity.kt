@@ -43,6 +43,7 @@ class MainActivity : AudioServiceActivity() {
     private val islandLyricChannelName = "com.feiniu.music/island_lyric"
     private val islandShizukuChannelName = "com.feiniu.music/island_lyric_shizuku"
     private val castVolumeChannelName = "com.feiniu.music/cast_volume"
+    private val bluetoothLyricChannelName = "com.feiniu.music/bluetooth_lyrics"
     private val notificationId = 10010
     private val notificationChannelId = "meizu_lyric_channel"
     private var flagShowTicker: Int? = null
@@ -340,6 +341,40 @@ class MainActivity : AudioServiceActivity() {
                     castVolumeActive = call.argument<Boolean>("active") ?: false
                 }
                 else -> {}
+            }
+        }
+
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            bluetoothLyricChannelName
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "startService" -> {
+                    val lyric = call.argument<String>("lyric") ?: ""
+                    val artist = call.argument<String>("artist") ?: "FeiNiuMusic"
+                    val intent = Intent(this, BluetoothLyricService::class.java).apply {
+                        putExtra("lyric", lyric)
+                        putExtra("artist", artist)
+                    }
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        startForegroundService(intent)
+                    } else {
+                        startService(intent)
+                    }
+                    result.success(true)
+                }
+                "stopService" -> {
+                    val intent = Intent(this, BluetoothLyricService::class.java)
+                    stopService(intent)
+                    result.success(true)
+                }
+                "updateLyric" -> {
+                    val lyric = call.argument<String>("lyric") ?: ""
+                    val artist = call.argument<String>("artist") ?: "FeiNiuMusic"
+                    BluetoothLyricService.updateLyric(lyric, artist)
+                    result.success(true)
+                }
+                else -> result.notImplemented()
             }
         }
     }
