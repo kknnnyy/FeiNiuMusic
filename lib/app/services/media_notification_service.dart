@@ -103,6 +103,15 @@ class MediaNotificationService {
       ).timeout(_initTimeout);
       _initAttempts = 0;
       _debugLog('init completed');
+
+      // 蓝牙歌词辅助同步：在 UI Isolate 监听歌词变动，通过 MethodChannel 穿透到原生 Service。
+      // 解决 audio_service 单 MediaSession 在车机蓝牙 AVRCP 协议上的刷新不灵敏问题。
+      LyricsService.instance.currentLineText.addListener(_onCarLyricChangedInUI);
+      PlayerService.instance.snapshot.addListener(_onCarLyricChangedInUI); // 增加切歌监听，确保切歌瞬间强制刷新
+      MediaNotificationSettings.carBluetoothLyrics.addListener(_syncCarLyricServiceStatus);
+      
+      // 初始化状态
+      _syncCarLyricServiceStatus();
     } catch (e) {
       _debugLog('AudioService.init failed/timeout: $e');
       _scheduleRetry();
@@ -122,6 +131,32 @@ class MediaNotificationService {
     _retryTimer = Timer(_retryAfter, () {
       unawaited(_initHandler());
     });
+  }
+
+  static void _onCarLyricChangedInUI() {
+    if (MediaNotificationSettings.carBluetoothLyrics.value) {
+      final lyric = LyricsService.instance.currentLineText.value;
+      final song = PlayerService.instance.snapshot.value.song;
+      _bluetoothChannel.invokeMethod('updateLyric', {
+        'lyric': lyric ?? '',
+        'artist': song?.artistDisplayName ?? 'FeiNiuMusic',
+        'title': song?.title ?? '',
+      });
+    }
+  }
+
+  static void _syncCarLyricServiceStatus() {
+    if (MediaNotificationSettings.carBluetoothLyrics.value) {
+      final lyric = LyricsService.instance.currentLineText.value;
+      final song = PlayerService.instance.snapshot.value.song;
+      _bluetoothChannel.invokeMethod('startService', {
+        'lyric': lyric ?? '',
+        'artist': song?.artistDisplayName ?? 'FeiNiuMusic',
+        'title': song?.title ?? '',
+      });
+    } else {
+      _bluetoothChannel.invokeMethod('stopService');
+    }
   }
 
   static void _debugLog(String message) {
@@ -192,6 +227,7 @@ class _FeiNiuAudioHandler extends BaseAudioHandler
   static const String _defaultAlbumArtworkName = 'ic_car_album';
 
   _FeiNiuAudioHandler(this.player) {
+    unawaited(MediaNotificationSettings.ensureLoaded());
     player.snapshot.addListener(_syncFromPlayer);
     LyricsService.instance.currentLineText.addListener(_onLyricLineChanged);
     MediaNotificationSettings.showLyrics.addListener(
@@ -377,9 +413,9 @@ class _FeiNiuAudioHandler extends BaseAudioHandler
     // LyricsService 当前行读取。开关关 → extras 为 null（不发歌词）；
     // 开关开但无歌词 → 发空串，让车机清除之前显示的行。
     final carLyricsEnabled = MediaNotificationSettings.carBluetoothLyrics.value;
-    final isCurrentSong = player.snapshot.value.song?.id == song.id;
+    final isCurrentSong = current || player.snapshot.value.song?.id == song.id;
     final carLyricLine = carLyricsEnabled && isCurrentSong
-        ? LyricsService.instance.currentLineText.value
+        ? _currentLyricLine
         : null;
     final carLyricsExtras = carLyricsEnabled
         ? <String, dynamic>{'android.media.metadata.LYRICS': carLyricLine ?? ''}
@@ -1191,6 +1227,8 @@ class _FeiNiuAudioHandler extends BaseAudioHandler
       MediaNotificationSettings.lyricOnTop.value,
       MediaNotificationSettings.showCloseAction.value,
       MediaNotificationSettings.showFavoriteAction.value,
+      MediaNotificationSettings.carBluetoothLyrics.value,
+      _currentLyricLine ?? '', // 包含当前歌词行，确保歌词变动时能触发 PlaybackState 刷新（Nudge）
       _supportsCustomActions,
     ].join('|');
     if (stateKey == _lastPlaybackStateKey) return;
@@ -1198,42 +1236,16 @@ class _FeiNiuAudioHandler extends BaseAudioHandler
     playbackState.add(next);
   }
 
+
+
   void _onLyricLineChanged() {
     _currentLyricLine = LyricsService.instance.currentLineText.value;
     _syncMediaItem();
-
-    if (MediaNotificationSettings.carBluetoothLyrics.value) {
-      final snap = player.snapshot.value;
-      final song = snap.song;
-      if (song != null) {
-        MediaNotificationService._bluetoothChannel.invokeMethod('updateLyric', {
-          'lyric': _currentLyricLine ?? '',
-          'artist': song.artistDisplayName,
-        });
-      }
-    }
   }
 
   void _onNotificationSettingsChanged() {
-    final carLyricsEnabled = MediaNotificationSettings.carBluetoothLyrics.value;
-    if (carLyricsEnabled) {
-      final snap = player.snapshot.value;
-      final song = snap.song;
-      MediaNotificationService._bluetoothChannel.invokeMethod('startService', {
-        'lyric': LyricsService.instance.currentLineText.value ?? '',
-        'artist': song?.artistDisplayName ?? 'FeiNiuMusic',
-      });
-    } else {
-      MediaNotificationService._bluetoothChannel.invokeMethod('stopService');
-    }
-
-    if (!MediaNotificationSettings.showLyrics.value) {
-      _currentLyricLine = null;
-    } else {
-      _currentLyricLine = LyricsService.instance.currentLineText.value;
-    }
     _syncMediaItem();
-    playbackState.add(_stateFromSnap(player.snapshot.value));
+    _syncPlaybackState(player.snapshot.value);
   }
 
   void _refreshFavoriteState() {
@@ -1281,7 +1293,7 @@ class _FeiNiuAudioHandler extends BaseAudioHandler
   }
 
   @override
-  Future<void> customAction(String name, [Map<String, dynamic>? extras]) async {
+  Future<dynamic> customAction(String name, [Map<String, dynamic>? extras]) async {
     _debugLog('customAction name=$name');
     if (name == _actionCloseApp) {
       _debugLog('close action');
