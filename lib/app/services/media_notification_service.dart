@@ -3,6 +3,7 @@ import 'dart:io' as io;
 
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -23,6 +24,8 @@ class MediaNotificationService {
   static AudioHandler? _audioHandler;
   static VoidCallback? _initListener;
   static bool _initStarted = false;
+  static const MethodChannel _bluetoothChannel =
+      MethodChannel('com.feiniu.music/bluetooth_lyrics');
 
   /// AudioService.init 单次握手超时。Android Auto 场景下 configure 存在竞态
   /// （后台引擎先绑定 MediaBrowserService 时，configureResult 可能永远等不到
@@ -209,6 +212,9 @@ class _FeiNiuAudioHandler extends BaseAudioHandler
     _currentLyricLine = LyricsService.instance.currentLineText.value;
     _loadPlatformCapabilities();
     _syncFromPlayer();
+    if (MediaNotificationSettings.carBluetoothLyrics.value) {
+      _onNotificationSettingsChanged();
+    }
   }
 
   Future<void> _loadPlatformCapabilities() async {
@@ -1195,9 +1201,32 @@ class _FeiNiuAudioHandler extends BaseAudioHandler
   void _onLyricLineChanged() {
     _currentLyricLine = LyricsService.instance.currentLineText.value;
     _syncMediaItem();
+
+    if (MediaNotificationSettings.carBluetoothLyrics.value) {
+      final snap = player.snapshot.value;
+      final song = snap.song;
+      if (song != null) {
+        MediaNotificationService._bluetoothChannel.invokeMethod('updateLyric', {
+          'lyric': _currentLyricLine ?? '',
+          'artist': song.artistDisplayName,
+        });
+      }
+    }
   }
 
   void _onNotificationSettingsChanged() {
+    final carLyricsEnabled = MediaNotificationSettings.carBluetoothLyrics.value;
+    if (carLyricsEnabled) {
+      final snap = player.snapshot.value;
+      final song = snap.song;
+      MediaNotificationService._bluetoothChannel.invokeMethod('startService', {
+        'lyric': LyricsService.instance.currentLineText.value ?? '',
+        'artist': song?.artistDisplayName ?? 'FeiNiuMusic',
+      });
+    } else {
+      MediaNotificationService._bluetoothChannel.invokeMethod('stopService');
+    }
+
     if (!MediaNotificationSettings.showLyrics.value) {
       _currentLyricLine = null;
     } else {

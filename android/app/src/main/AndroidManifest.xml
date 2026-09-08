@@ -4,6 +4,7 @@
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <!-- DLNA 投屏（media_cast_dlna / jUPnP）：SSDP 组播发现需要 WiFi 状态
          与组播锁权限。插件 manifest 已自带，此处显式声明保证合并一致。 -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
@@ -92,6 +93,12 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <service
+            android:name=".BluetoothLyricService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
 
         <!-- audio_service: foreground service hosting the MediaSession. Must be
              exported with the MediaBrowserService intent-filter so the system
