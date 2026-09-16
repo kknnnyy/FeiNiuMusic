@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../app/router/app_router.dart';
 import '../../app/services/feiniu/account_store.dart';
+import '../../app/state/settings_background_state.dart';
+import '../../app/theme/app_styles.dart';
 import '../account/account_header_card.dart';
 import 'base/app_page_scaffold.dart';
 
@@ -14,11 +16,21 @@ class SideMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: Listenable.merge([
+        AppBackgroundSettings.backgroundImagePath,
+        AppBackgroundSettings.pageGlowEnabled,
+      ]),
+      builder: (context, _) => _buildMenu(context),
+    );
+  }
+
+  Widget _buildMenu(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
 
-    // 干净的中性渐变背景：表面色 → surfaceContainerLow，无彩色光晕，
-    // 让统一的主题色点缀（图标/色条）成为唯一的彩色，协调不花哨。
+    // 有全局背景时透出外壳的背景，遮罩与模糊由 AppBackground 统一处理。
+    final hasBackground = theme.hasAmbientBackground;
     final surface = scheme.surface;
     final bottomColor = Color.alphaBlend(
       scheme.surfaceContainerLow.withValues(alpha: 0.45),
@@ -27,17 +39,21 @@ class SideMenu extends StatelessWidget {
 
     // 三张导航卡片统一用表面色块，仅靠圆角/阴影/留白区分；
     // 颜色层次交给统一的主题色图标与标题色条，避免多色渐变杂乱。
-    final cardColor = scheme.surfaceContainerHigh.withValues(alpha: 0.55);
+    final cardColor = scheme.surfaceContainerHigh.withValues(
+      alpha: hasBackground ? 0.18 : 0.55,
+    );
 
     return Material(
       color: Colors.transparent,
       child: Container(
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [surface, bottomColor],
-          ),
+          gradient: hasBackground
+              ? null
+              : LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [surface, bottomColor],
+                ),
         ),
         child: SafeArea(
           child: Column(
@@ -132,7 +148,8 @@ class SideMenu extends StatelessWidget {
                         _MenuItem(
                           icon: Icons.settings_rounded,
                           label: '设置',
-                          onTap: () => _pushAndClose(context, AppRoutes.settings),
+                          onTap: () =>
+                              _pushAndClose(context, AppRoutes.settings),
                         ),
                       ],
                     ),
