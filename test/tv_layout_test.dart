@@ -193,5 +193,23 @@ void main() {
       expect(orientations, contains(DeviceOrientation.landscapeLeft));
       expect(orientations.length, 4);
     });
+
+    test('手机播放页：临时开放四方向', () {
+      final orientations = AppLayoutSettings.orientationsForPlayer(isTv: false);
+
+      expect(orientations, contains(DeviceOrientation.portraitUp));
+      expect(orientations, contains(DeviceOrientation.landscapeLeft));
+      expect(orientations, contains(DeviceOrientation.landscapeRight));
+      expect(orientations.length, 4);
+    });
+
+    test('TV 播放页：仍只允许左右横屏', () {
+      final orientations = AppLayoutSettings.orientationsForPlayer(isTv: true);
+
+      expect(orientations, contains(DeviceOrientation.landscapeLeft));
+      expect(orientations, contains(DeviceOrientation.landscapeRight));
+      expect(orientations, isNot(contains(DeviceOrientation.portraitUp)));
+      expect(orientations.length, 2);
+    });
   });
 }

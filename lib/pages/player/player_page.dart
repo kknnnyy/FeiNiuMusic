@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_lyric/core/lyric_model.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 import 'package:signals_flutter/signals_flutter.dart' hide computed;
@@ -45,6 +46,7 @@ class _PlayerPageState extends State<PlayerPage>
   @override
   void initState() {
     super.initState();
+    _applyPlayerOrientations();
     // 播放页路由激活标记：TV 模式据此隐藏侧栏与迷你播放器。
     // 延迟到首帧后设置：initState 在 build 阶段执行，此时直接改
     // playerRouteActive 会通知祖先的 ValueListenableBuilder 触发
@@ -131,8 +133,29 @@ class _PlayerPageState extends State<PlayerPage>
     navigator.pushReplacementNamed(AppRoutes.home);
   }
 
+  void _applyPlayerOrientations() {
+    if (!Platform.isAndroid && !Platform.isIOS) return;
+    SystemChrome.setPreferredOrientations(
+      AppLayoutSettings.orientationsForPlayer(
+        isTv: AppLayoutSettings.tvMode.value,
+      ),
+    );
+  }
+
+  void _restoreAppOrientations() {
+    if (!Platform.isAndroid && !Platform.isIOS) return;
+    SystemChrome.setPreferredOrientations(
+      AppLayoutSettings.orientationsForDevice(
+        isTv: AppLayoutSettings.tvMode.value,
+        shortestSide: AppLayoutSettings.currentShortestSide(),
+        manualTabletMode: AppLayoutSettings.tabletMode.value,
+      ),
+    );
+  }
+
   @override
   void dispose() {
+    _restoreAppOrientations();
     _dismissController.dispose();
     _pageController.dispose();
     _dismissOffset.dispose();
@@ -195,6 +218,9 @@ class _PlayerPageState extends State<PlayerPage>
                         (AppLayoutSettings.tvMode.value ||
                             mq.orientation == Orientation.landscape) &&
                         mq.size.width >= 900;
+                    final isCompactLandscape =
+                        mq.orientation == Orientation.landscape &&
+                        !isTabletLandscape;
                     // Poster 关闭顶部/底部 SafeArea 让封面延伸到屏幕边缘
                     // （覆盖状态栏/导航栏），歌词页再手动补回 inset 避免文字
                     // 滑入系统栏下方。
@@ -211,7 +237,9 @@ class _PlayerPageState extends State<PlayerPage>
                             onVerticalDragUpdate: _handleDismissDragUpdate,
                             onVerticalDragEnd: _handleDismissDragEnd,
                             onVerticalDragCancel: _handleDismissDragCancel,
-                            child: isPoster || isTabletLandscape
+                            child: isPoster ||
+                                    isTabletLandscape ||
+                                    isCompactLandscape
                                 ? const SizedBox.shrink()
                                 : PlayerHeader(
                                     songSignal: _player.currentSongSignal,
@@ -359,6 +387,17 @@ class _PlayerView extends StatelessWidget {
                 (AppLayoutSettings.tvMode.value ||
                     mq.orientation == Orientation.landscape) &&
                 mq.size.width >= 900;
+            final isCompactLandscape =
+                mq.orientation == Orientation.landscape &&
+                !isTabletLandscape;
+            if (isCompactLandscape) {
+              return _CompactLandscapePlayerLayout(
+                player: player,
+                stylePreset: stylePreset,
+                onTapLyrics: onTapLyrics,
+                bottomPanelFocus: bottomPanelFocus,
+              );
+            }
             if (!isTabletLandscape) {
               if (stylePreset == PlayerStylePreset.poster) {
                 return _PosterPlayerLayout(
@@ -420,6 +459,61 @@ class _MobilePlayerLayout extends StatelessWidget {
           bottomPanelFocus: bottomPanelFocus,
         ),
       ],
+    );
+  }
+}
+
+class _CompactLandscapePlayerLayout extends StatelessWidget {
+  final PlayerService player;
+  final PlayerStylePreset stylePreset;
+  final VoidCallback onTapLyrics;
+  final FocusNode? bottomPanelFocus;
+
+  const _CompactLandscapePlayerLayout({
+    required this.player,
+    required this.stylePreset,
+    required this.onTapLyrics,
+    this.bottomPanelFocus,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      key: const ValueKey('compact-landscape-player-layout'),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 5,
+            child: _PlayerArtwork(
+              songSignal: player.currentSongSignal,
+              stylePreset: stylePreset,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 6,
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  PlayerHeader(
+                    songSignal: player.currentSongSignal,
+                    stylePreset: stylePreset,
+                  ),
+                  PlayerBottomPanel(
+                    player: player,
+                    stylePreset: stylePreset,
+                    onTapLyrics: onTapLyrics,
+                    showMiniLyrics: false,
+                    compact: true,
+                    bottomPanelFocus: bottomPanelFocus,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

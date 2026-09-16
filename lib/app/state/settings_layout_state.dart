@@ -118,6 +118,28 @@ class AppLayoutSettings {
     return const [DeviceOrientation.portraitUp];
   }
 
+  /// 播放页可用方向。
+  ///
+  /// 手机仅在播放页临时开放横竖屏；平板沿用四方向，TV 仍保持横屏。
+  /// 离开播放页后必须重新应用 [orientationsForDevice]，避免其它手机页面
+  /// 也跟随设备旋转。
+  static List<DeviceOrientation> orientationsForPlayer({
+    required bool isTv,
+  }) {
+    if (isTv) {
+      return const [
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ];
+    }
+    return const [
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ];
+  }
+
   /// 当前窗口逻辑尺寸最短边（dp），无视图时返回 0。
   ///
   /// 用 `WidgetsBinding.instance.platformDispatcher.views` 读取首个视图的

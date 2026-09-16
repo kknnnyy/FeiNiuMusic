@@ -59,4 +59,22 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.byType(PlayerLyricsView), findsNothing);
   });
+
+  testWidgets('手机横屏：使用紧凑双栏布局且不溢出', (tester) async {
+    tester.view.physicalSize = const Size(844, 390);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(const MaterialApp(home: PlayerPage()));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+
+    expect(
+      find.byKey(const ValueKey('compact-landscape-player-layout')),
+      findsOneWidget,
+    );
+    expect(find.byType(PlayerLyricsView), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 }
