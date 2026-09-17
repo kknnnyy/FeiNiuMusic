@@ -24,6 +24,7 @@ class _SettingsPageState extends State<SettingsPage> {
     MediaNotificationSettings.ensureLoaded();
     StatusBarSettings.ensureLoaded();
     CloseToTraySettings.ensureLoaded();
+    DesktopLyricsSettings.ensureLoaded();
     AppLayoutSettings.ensureLoaded();
     AppBackgroundSettings.ensureLoaded();
   }
@@ -185,25 +186,50 @@ class _SettingsPageState extends State<SettingsPage> {
                 ],
               ),
               const SizedBox(height: 16),
-              if (Platform.isMacOS || Platform.isWindows)
+              if (Platform.isMacOS || Platform.isWindows || Platform.isLinux)
                 AppSettingSection(
                   title: '桌面端',
                   children: [
                     ValueListenableBuilder<bool>(
-                      valueListenable: CloseToTraySettings.enabled,
+                      valueListenable: DesktopLyricsSettings.enabled,
                       builder: (context, enabled, _) {
                         return AppSettingSwitchTile(
-                          title: '关闭按钮隐藏到托盘',
-                          subtitle: Platform.isMacOS
-                              ? '状态栏播放状态开启时，点击关闭按钮隐藏到菜单栏'
-                              : '点击窗口关闭按钮时隐藏到系统托盘，而不是退出应用',
+                          title: '桌面歌词',
+                          subtitle: enabled
+                              ? '在其它窗口上方显示当前歌词，可拖动调整位置'
+                              : '在桌面上显示当前播放歌词',
                           value: enabled,
-                          onChanged: (value) {
-                            CloseToTraySettings.setEnabled(value);
-                          },
+                          onChanged: DesktopLyricsSettings.setEnabled,
                         );
                       },
                     ),
+                    AppSettingTile(
+                      title: '桌面歌词样式',
+                      subtitle: '字体、字号、颜色、透明度与位置',
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: () => showModalBottomSheet<void>(
+                        context: context,
+                        isScrollControlled: true,
+                        showDragHandle: true,
+                        builder: (_) => const _DesktopLyricsStyleSheet(),
+                      ),
+                    ),
+                    if (Platform.isMacOS || Platform.isWindows)
+                      ValueListenableBuilder<bool>(
+                        valueListenable: CloseToTraySettings.enabled,
+                        builder: (context, enabled, _) {
+                          return AppSettingSwitchTile(
+                            title: '关闭按钮隐藏到托盘',
+                            subtitle: Platform.isMacOS
+                                ? '状态栏播放状态开启时，点击关闭按钮隐藏到菜单栏'
+                                : '点击窗口关闭按钮时隐藏到系统托盘，而不是退出应用',
+                            value: enabled,
+                            onChanged: (value) {
+                              CloseToTraySettings.setEnabled(value);
+                            },
+                          );
+                        },
+                      ),
                     if (Platform.isMacOS)
                       ValueListenableBuilder<bool>(
                         valueListenable: StatusBarSettings.enabled,
@@ -220,7 +246,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                   ],
                 ),
-              if (Platform.isMacOS || Platform.isWindows)
+              if (Platform.isMacOS || Platform.isWindows || Platform.isLinux)
                 const SizedBox(height: 16),
               AppSettingSection(
                 title: '应用',
@@ -267,4 +293,183 @@ class _SettingsPageState extends State<SettingsPage> {
       },
     );
   }
+}
+
+class _DesktopLyricsStyleSheet extends StatefulWidget {
+  const _DesktopLyricsStyleSheet();
+
+  @override
+  State<_DesktopLyricsStyleSheet> createState() =>
+      _DesktopLyricsStyleSheetState();
+}
+
+class _DesktopLyricsStyleSheetState extends State<_DesktopLyricsStyleSheet> {
+  late final TextEditingController _fontController;
+  late final TextEditingController _textColorController;
+  late final TextEditingController _highlightColorController;
+  late double _fontSize;
+  late double _backgroundOpacity;
+  late String _position;
+
+  @override
+  void initState() {
+    super.initState();
+    _fontController = TextEditingController(
+      text: DesktopLyricsSettings.fontFamily.value,
+    );
+    _textColorController = TextEditingController(
+      text: _toHex(DesktopLyricsSettings.textColor.value),
+    );
+    _highlightColorController = TextEditingController(
+      text: _toHex(DesktopLyricsSettings.highlightColor.value),
+    );
+    _fontSize = DesktopLyricsSettings.fontSize.value;
+    _backgroundOpacity = DesktopLyricsSettings.backgroundOpacity.value;
+    _position = DesktopLyricsSettings.position.value;
+  }
+
+  @override
+  void dispose() {
+    _fontController.dispose();
+    _textColorController.dispose();
+    _highlightColorController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('桌面歌词样式', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _fontController,
+              decoration: const InputDecoration(
+                labelText: '字体',
+                hintText: '系统字体名称，例如 PingFang SC',
+                helperText: 'macOS / Windows / Linux 使用各自已安装的字体；不存在时自动回退。',
+                border: OutlineInputBorder(),
+              ),
+              onSubmitted: (_) =>
+                  DesktopLyricsSettings.setFontFamily(_fontController.text),
+              onEditingComplete: () =>
+                  DesktopLyricsSettings.setFontFamily(_fontController.text),
+            ),
+            const SizedBox(height: 8),
+            AppSettingSlider(
+              title: '字号',
+              value: _fontSize,
+              min: 14,
+              max: 48,
+              divisions: 34,
+              valueText: '${_fontSize.round()} px',
+              onChanged: (value) {
+                setState(() => _fontSize = value);
+                DesktopLyricsSettings.setFontSize(value);
+              },
+            ),
+            const SizedBox(height: 4),
+            _colorField(
+              controller: _textColorController,
+              label: '歌词颜色',
+              onSubmitted: (value) =>
+                  _saveColor(value, DesktopLyricsSettings.setTextColor),
+            ),
+            const SizedBox(height: 12),
+            _colorField(
+              controller: _highlightColorController,
+              label: '高亮颜色',
+              onSubmitted: (value) =>
+                  _saveColor(value, DesktopLyricsSettings.setHighlightColor),
+            ),
+            const SizedBox(height: 8),
+            AppSettingSlider(
+              title: '背景透明度',
+              value: _backgroundOpacity,
+              min: 0,
+              max: 0.9,
+              divisions: 18,
+              valueText: _backgroundOpacity == 0
+                  ? '完全透明'
+                  : '${(_backgroundOpacity * 100).round()}%',
+              description: '设为 0 即只显示歌词文字；窗口仍可拖动。',
+              onChanged: (value) {
+                setState(() => _backgroundOpacity = value);
+                DesktopLyricsSettings.setBackgroundOpacity(value);
+              },
+            ),
+            const SizedBox(height: 4),
+            DropdownButtonFormField<String>(
+              initialValue: _position,
+              decoration: const InputDecoration(
+                labelText: '默认位置',
+                border: OutlineInputBorder(),
+              ),
+              items: const [
+                DropdownMenuItem(value: 'free', child: Text('自由拖动')),
+                DropdownMenuItem(value: 'topLeft', child: Text('左上')),
+                DropdownMenuItem(value: 'topCenter', child: Text('顶部居中')),
+                DropdownMenuItem(value: 'topRight', child: Text('右上')),
+                DropdownMenuItem(value: 'centerLeft', child: Text('左侧居中')),
+                DropdownMenuItem(value: 'center', child: Text('屏幕居中')),
+                DropdownMenuItem(value: 'centerRight', child: Text('右侧居中')),
+                DropdownMenuItem(value: 'bottomLeft', child: Text('左下')),
+                DropdownMenuItem(value: 'bottomCenter', child: Text('底部居中')),
+                DropdownMenuItem(value: 'bottomRight', child: Text('右下')),
+              ],
+              onChanged: (value) {
+                if (value == null) return;
+                setState(() => _position = value);
+                DesktopLyricsSettings.setPosition(value);
+              },
+            ),
+            const SizedBox(height: 12),
+            Text(
+              '提示：桌面歌词窗口可以直接拖动；选择“自由拖动”后会保留你最后拖到的位置。',
+              style: TextStyle(color: colors.onSurfaceVariant, fontSize: 13),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _colorField({
+    required TextEditingController controller,
+    required String label,
+    required ValueChanged<String> onSubmitted,
+  }) {
+    return TextField(
+      controller: controller,
+      textCapitalization: TextCapitalization.characters,
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: '#FFFFFFFF 或 #80FFFFFF',
+        border: const OutlineInputBorder(),
+      ),
+      onSubmitted: onSubmitted,
+      onEditingComplete: () => onSubmitted(controller.text),
+    );
+  }
+
+  void _saveColor(String value, Future<void> Function(int) setter) {
+    final color = _parseColor(value);
+    if (color == null) return;
+    setter(color);
+  }
+
+  int? _parseColor(String value) {
+    final normalized = value.trim().replaceFirst('#', '');
+    final full = normalized.length == 6 ? 'FF$normalized' : normalized;
+    if (full.length != 8) return null;
+    return int.tryParse(full, radix: 16);
+  }
+
+  String _toHex(int value) =>
+      '#${value.toRadixString(16).padLeft(8, '0').toUpperCase()}';
 }

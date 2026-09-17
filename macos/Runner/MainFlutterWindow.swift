@@ -1,5 +1,6 @@
 import Cocoa
 import FlutterMacOS
+import desktop_multi_window
 
 class MainFlutterWindow: NSWindow, NSWindowDelegate {
   private var statusBarController: MacosStatusBarController?
@@ -21,6 +22,9 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     flutterViewController.backgroundColor = resolveInitialBackground()
 
     RegisterGeneratedPlugins(registry: flutterViewController)
+    FlutterMultiWindowPlugin.setOnWindowCreatedCallback { controller in
+      RegisterGeneratedPlugins(registry: controller)
+    }
     // 窗口背景色同步通道：Flutter 侧把主题背景色（ARGB int）推到这里，
     // 覆盖上面的初始底色，并跟随主题/系统亮暗实时更新。
     let windowChannel = FlutterMethodChannel(
