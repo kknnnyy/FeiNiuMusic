@@ -1864,8 +1864,9 @@ class PlayerService with WidgetsBindingObserver {
           : Duration.zero;
 
       // 转码歌（just_audio 播 HLS）解析失败：优先降级音质，而非直接升级/跳过。
-      // - 生效 codec 是 flac 且未降级 → 降级 mp3 重新转码（flac→mp3→直连）。
-      // - 已是 mp3/opus 或已降级仍失败 → 完全失败：标记退直连（不重转码，
+      // - 生效 codec 是 opus（或旧配置遗留的 flac）且未降级 → 降级 mp3
+      //   重新转码（opus/flac→mp3→直连）。
+      // - 已是 mp3 或已降级仍失败 → 完全失败：标记退直连（不重转码，
       //   防死循环）。
       if (!isMediaKitError &&
           FeiNiuTranscodeService.instance.activeTranscodeIds.contains(
@@ -1874,10 +1875,10 @@ class PlayerService with WidgetsBindingObserver {
         final codec = FeiNiuTranscodeService.instance.effectiveCodecFor(
           failedSong.id,
         );
-        if (codec == 'flac' &&
+        if ((codec == 'opus' || codec == 'flac') &&
             !FeiNiuTranscodeService.instance.isDowngradedToMp3(failedSong.id)) {
           _debugLog(
-            'transcode ${failedSong.title} flac decode failed -> downgrade mp3',
+            'transcode ${failedSong.title} $codec decode failed -> downgrade mp3',
           );
           FeiNiuTranscodeService.instance.markDowngradeToMp3(failedSong.id);
           _quitTranscodeFor(failedSong.id);
@@ -3825,6 +3826,7 @@ class PlayerService with WidgetsBindingObserver {
       final song = list[idx];
       final previousSongId = currentSong.value?.id;
       final songChanged = previousSongId != song.id;
+      if (songChanged) playbackTranscodeCodec.value = null;
       currentSong.value = song;
       StreamCacheService.instance.currentSongId = song.id;
       if (songChanged) {
@@ -4127,11 +4129,19 @@ class PlayerService with WidgetsBindingObserver {
         );
       }
       _resolvedPlaybackCodecs[song.id] = codec;
+      if (currentSong.value?.id == song.id) {
+        playbackTranscodeCodec.value = codec;
+      }
       return AudioSource.file(cached.path);
     }
 
     // 2) 需要转码判定：不转 → 直接直连（不标记，正常回落）。
-    if (!await svc.shouldTranscode(song)) return null;
+    if (!await svc.shouldTranscode(song)) {
+      if (currentSong.value?.id == song.id) {
+        playbackTranscodeCodec.value = null;
+      }
+      return null;
+    }
 
     // 3) 在线 HLS。
     final hlsUrl = await svc.transcodeHlsUrlFor(song);
@@ -4152,6 +4162,9 @@ class PlayerService with WidgetsBindingObserver {
     _activeTranscodeHlsUrl = hlsUrl;
     _activeTranscodeCodec = codec;
     _resolvedPlaybackCodecs[song.id] = codec;
+    if (currentSong.value?.id == song.id) {
+      playbackTranscodeCodec.value = codec;
+    }
     return AudioSource.uri(
       Uri.parse(hlsUrl),
       headers: FeiNiuApiClient.imageAuthHeaders(),
