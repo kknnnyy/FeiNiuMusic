@@ -347,12 +347,41 @@ class _DesktopLyricsStyleSheetState extends State<_DesktopLyricsStyleSheet> {
           children: [
             Text('桌面歌词样式', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              initialValue: _fontChoices.contains(_fontController.text)
+                  ? _fontController.text
+                  : '',
+              decoration: const InputDecoration(
+                labelText: '字体',
+                border: OutlineInputBorder(),
+              ),
+              items: _fontChoices
+                  .map(
+                    (family) => DropdownMenuItem<String>(
+                      value: family,
+                      child: Text(
+                        family.isEmpty ? '系统默认' : family,
+                        style: family.isEmpty
+                            ? null
+                            : TextStyle(fontFamily: family),
+                      ),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                if (value == null) return;
+                _fontController.text = value;
+                DesktopLyricsSettings.setFontFamily(value);
+                setState(() {});
+              },
+            ),
+            const SizedBox(height: 8),
             TextField(
               controller: _fontController,
               decoration: const InputDecoration(
-                labelText: '字体',
-                hintText: '系统字体名称，例如 PingFang SC',
-                helperText: 'macOS / Windows / Linux 使用各自已安装的字体；不存在时自动回退。',
+                labelText: '自定义字体名称（可选）',
+                hintText: '例如 PingFang SC、Microsoft YaHei、Noto Sans CJK SC',
+                helperText: '下拉列表提供常见系统字体；自定义名称不存在时会自动回退。',
                 border: OutlineInputBorder(),
               ),
               onSubmitted: (_) =>
@@ -397,7 +426,7 @@ class _DesktopLyricsStyleSheetState extends State<_DesktopLyricsStyleSheet> {
               valueText: _backgroundOpacity == 0
                   ? '完全透明'
                   : '${(_backgroundOpacity * 100).round()}%',
-              description: '设为 0 即只显示歌词文字；窗口仍可拖动。',
+              description: '设为 0 即只显示歌词文字；位置可通过下方预设调整。',
               onChanged: (value) {
                 setState(() => _backgroundOpacity = value);
                 DesktopLyricsSettings.setBackgroundOpacity(value);
@@ -411,16 +440,9 @@ class _DesktopLyricsStyleSheetState extends State<_DesktopLyricsStyleSheet> {
                 border: OutlineInputBorder(),
               ),
               items: const [
+                DropdownMenuItem(value: 'fixed', child: Text('固定位置')),
                 DropdownMenuItem(value: 'free', child: Text('自由拖动')),
-                DropdownMenuItem(value: 'topLeft', child: Text('左上')),
-                DropdownMenuItem(value: 'topCenter', child: Text('顶部居中')),
-                DropdownMenuItem(value: 'topRight', child: Text('右上')),
-                DropdownMenuItem(value: 'centerLeft', child: Text('左侧居中')),
-                DropdownMenuItem(value: 'center', child: Text('屏幕居中')),
-                DropdownMenuItem(value: 'centerRight', child: Text('右侧居中')),
-                DropdownMenuItem(value: 'bottomLeft', child: Text('左下')),
-                DropdownMenuItem(value: 'bottomCenter', child: Text('底部居中')),
-                DropdownMenuItem(value: 'bottomRight', child: Text('右下')),
+                DropdownMenuItem(value: 'locked', child: Text('锁定当前位置')),
               ],
               onChanged: (value) {
                 if (value == null) return;
@@ -430,7 +452,7 @@ class _DesktopLyricsStyleSheetState extends State<_DesktopLyricsStyleSheet> {
             ),
             const SizedBox(height: 12),
             Text(
-              '提示：桌面歌词窗口可以直接拖动；选择“自由拖动”后会保留你最后拖到的位置。',
+              '提示：选择“自由拖动”调整位置，拖动结束后选择“锁定当前位置”即可保存并点击穿透。',
               style: TextStyle(color: colors.onSurfaceVariant, fontSize: 13),
             ),
           ],
@@ -472,4 +494,40 @@ class _DesktopLyricsStyleSheetState extends State<_DesktopLyricsStyleSheet> {
 
   String _toHex(int value) =>
       '#${value.toRadixString(16).padLeft(8, '0').toUpperCase()}';
+
+  List<String> get _fontChoices {
+    final choices = <String>[
+      '',
+      if (Platform.isMacOS) ...[
+        'PingFang SC',
+        'Hiragino Sans GB',
+        'SF Pro Display',
+        'Helvetica Neue',
+        'Optima',
+      ],
+      if (Platform.isWindows) ...[
+        'Microsoft YaHei',
+        'Microsoft YaHei UI',
+        'Segoe UI',
+        'Arial',
+        'Consolas',
+      ],
+      if (Platform.isLinux) ...[
+        'Noto Sans CJK SC',
+        'Noto Sans',
+        'DejaVu Sans',
+        'Liberation Sans',
+      ],
+      'Arial',
+      'Helvetica',
+      'Times New Roman',
+      'Georgia',
+      'Courier New',
+    ];
+    final current = _fontController.text.trim();
+    if (current.isNotEmpty && !choices.contains(current)) {
+      choices.insert(1, current);
+    }
+    return choices.toSet().toList();
+  }
 }

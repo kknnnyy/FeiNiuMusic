@@ -52,6 +52,7 @@ void main() {
     expect(payload?['currentLine'], '当前歌词');
     expect(payload?['nextLine'], '下一行歌词');
     expect(payload?['progress'], 0.25);
+    expect(payload?['karaoke'], isFalse);
   });
 
   test('逐字歌词按字的时间轴计算高亮进度', () {
@@ -80,5 +81,14 @@ void main() {
       ),
       0.75,
     );
+
+    final payload = DesktopLyricsService.buildPayload(
+      enabled: true,
+      title: '歌名',
+      lines: [line],
+      activeIndex: 0,
+      position: const Duration(seconds: 4),
+    );
+    expect(payload?['karaoke'], isTrue);
   });
 }

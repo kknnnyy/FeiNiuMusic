@@ -3,7 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// macOS 桌面歌词的显示设置。
 ///
-/// 颜色使用 ARGB 整数保存，位置使用九宫格预设或 `free`（自由拖动）。
+/// 颜色使用 ARGB 整数保存，位置使用 `fixed`（固定位置）或 `free`（自由拖动）。
 class DesktopLyricsSettings {
   static const String _prefsEnabled = 'desktop_lyrics_enabled';
   static const String _prefsFontFamily = 'desktop_lyrics_font_family';
@@ -13,13 +13,21 @@ class DesktopLyricsSettings {
   static const String _prefsBackgroundOpacity =
       'desktop_lyrics_background_opacity';
   static const String _prefsPosition = 'desktop_lyrics_position';
+  static const String _prefsLockedPositionX =
+      'desktop_lyrics_locked_position_x';
+  static const String _prefsLockedPositionY =
+      'desktop_lyrics_locked_position_y';
+
+  static const String positionFixed = 'fixed';
+  static const String positionFree = 'free';
+  static const String positionLocked = 'locked';
 
   static const String defaultFontFamily = 'Optima-Regular';
   static const double defaultFontSize = 24;
   static const int defaultTextColor = 0xFFFFFFFF;
   static const int defaultHighlightColor = 0xFF59F7E7;
   static const double defaultBackgroundOpacity = 0.64;
-  static const String defaultPosition = 'bottomCenter';
+  static const String defaultPosition = positionFixed;
 
   static final ValueNotifier<bool> enabled = ValueNotifier(false);
   static final ValueNotifier<String> fontFamily = ValueNotifier(
@@ -34,6 +42,12 @@ class DesktopLyricsSettings {
     defaultBackgroundOpacity,
   );
   static final ValueNotifier<String> position = ValueNotifier(defaultPosition);
+
+  static double? _lockedPositionX;
+  static double? _lockedPositionY;
+
+  static double? get lockedPositionX => _lockedPositionX;
+  static double? get lockedPositionY => _lockedPositionY;
 
   static Future<void>? _loading;
 
@@ -52,7 +66,9 @@ class DesktopLyricsSettings {
     backgroundOpacity.value = _clampOpacity(
       prefs.getDouble(_prefsBackgroundOpacity) ?? defaultBackgroundOpacity,
     );
-    position.value = prefs.getString(_prefsPosition) ?? defaultPosition;
+    position.value = _normalizePosition(prefs.getString(_prefsPosition));
+    _lockedPositionX = prefs.getDouble(_prefsLockedPositionX);
+    _lockedPositionY = prefs.getDouble(_prefsLockedPositionY);
   }
 
   static Future<void> setEnabled(bool value) async {
@@ -62,7 +78,12 @@ class DesktopLyricsSettings {
 
   static Future<void> setFontFamily(String value) async {
     final normalized = value.trim();
-    if (normalized.isEmpty) return;
+    if (normalized.isEmpty) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_prefsFontFamily);
+      fontFamily.value = '';
+      return;
+    }
     await _saveString(_prefsFontFamily, normalized);
     fontFamily.value = normalized;
   }
@@ -90,13 +111,27 @@ class DesktopLyricsSettings {
   }
 
   static Future<void> setPosition(String value) async {
-    await _saveString(_prefsPosition, value);
-    position.value = value;
+    final normalized = _normalizePosition(value);
+    await _saveString(_prefsPosition, normalized);
+    position.value = normalized;
+  }
+
+  static Future<void> setLockedPosition(double x, double y) async {
+    if (!x.isFinite || !y.isFinite) return;
+    await _saveDouble(_prefsLockedPositionX, x);
+    await _saveDouble(_prefsLockedPositionY, y);
+    _lockedPositionX = x;
+    _lockedPositionY = y;
   }
 
   static double _clampFontSize(double value) => value.clamp(14.0, 48.0);
 
   static double _clampOpacity(double value) => value.clamp(0.0, 0.9);
+
+  static String _normalizePosition(String? value) {
+    if (value == positionFree || value == positionLocked) return value!;
+    return defaultPosition;
+  }
 
   static Future<void> _saveBool(String key, bool value) async {
     final prefs = await SharedPreferences.getInstance();
@@ -128,5 +163,7 @@ class DesktopLyricsSettings {
     highlightColor.value = defaultHighlightColor;
     backgroundOpacity.value = defaultBackgroundOpacity;
     position.value = defaultPosition;
+    _lockedPositionX = null;
+    _lockedPositionY = null;
   }
 }

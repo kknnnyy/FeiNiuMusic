@@ -20,7 +20,8 @@ void main() {
     await DesktopLyricsSettings.setTextColor(0xFF112233);
     await DesktopLyricsSettings.setHighlightColor(0xFF44EECC);
     await DesktopLyricsSettings.setBackgroundOpacity(0);
-    await DesktopLyricsSettings.setPosition('topCenter');
+    await DesktopLyricsSettings.setPosition('fixed');
+    await DesktopLyricsSettings.setLockedPosition(120, 240);
 
     DesktopLyricsSettings.resetForTest();
     await DesktopLyricsSettings.ensureLoaded();
@@ -31,7 +32,9 @@ void main() {
     expect(DesktopLyricsSettings.textColor.value, 0xFF112233);
     expect(DesktopLyricsSettings.highlightColor.value, 0xFF44EECC);
     expect(DesktopLyricsSettings.backgroundOpacity.value, 0);
-    expect(DesktopLyricsSettings.position.value, 'topCenter');
+    expect(DesktopLyricsSettings.position.value, 'fixed');
+    expect(DesktopLyricsSettings.lockedPositionX, 120);
+    expect(DesktopLyricsSettings.lockedPositionY, 240);
   });
 
   test('字号和透明度会限制在安全范围内', () async {

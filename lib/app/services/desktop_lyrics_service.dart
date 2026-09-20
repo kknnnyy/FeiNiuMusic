@@ -40,6 +40,14 @@ class DesktopLyricsService {
       if (call.method == 'ready') {
         _windowReady = true;
         _queueSync();
+      } else if (call.method == 'draggedPosition' && call.arguments is Map) {
+        final arguments = Map<String, Object?>.from(call.arguments as Map);
+        final x = (arguments['x'] as num?)?.toDouble();
+        final y = (arguments['y'] as num?)?.toDouble();
+        if (x != null && y != null) {
+          await DesktopLyricsSettings.setLockedPosition(x, y);
+          _queueSync();
+        }
       }
       return null;
     });
@@ -119,7 +127,12 @@ class DesktopLyricsService {
   }) {
     if (!enabled || title == null || title.trim().isEmpty) return null;
     if (activeIndex < 0 || activeIndex >= lines.length) {
-      return const {'currentLine': '暂无歌词', 'nextLine': '', 'progress': 0.0};
+      return const {
+        'currentLine': '暂无歌词',
+        'nextLine': '',
+        'progress': 0.0,
+        'karaoke': false,
+      };
     }
     final current = lines[activeIndex];
     final next = activeIndex + 1 < lines.length ? lines[activeIndex + 1] : null;
@@ -131,6 +144,8 @@ class DesktopLyricsService {
         position: position,
         nextLineStart: next?.start,
       ),
+      // 只有原始歌词带逐字时间轴时才启用扫光；普通 LRC 保持整行固定。
+      'karaoke': current.words?.isNotEmpty == true,
     };
   }
 
@@ -170,10 +185,16 @@ class DesktopLyricsService {
           'highlightColor': DesktopLyricsSettings.highlightColor.value,
           'backgroundOpacity': DesktopLyricsSettings.backgroundOpacity.value,
           'position': DesktopLyricsSettings.position.value,
+          'lockedPositionX': DesktopLyricsSettings.lockedPositionX,
+          'lockedPositionY': DesktopLyricsSettings.lockedPositionY,
         })
         .catchError((_) {});
     await _channel
-        .invokeMethod<void>('position', DesktopLyricsSettings.position.value)
+        .invokeMethod<void>('position', {
+          'mode': DesktopLyricsSettings.position.value,
+          'x': DesktopLyricsSettings.lockedPositionX,
+          'y': DesktopLyricsSettings.lockedPositionY,
+        })
         .catchError((_) {});
     await _channel.invokeMethod<void>('show').catchError((_) {});
   }
