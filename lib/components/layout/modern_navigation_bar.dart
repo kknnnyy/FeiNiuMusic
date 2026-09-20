@@ -7,6 +7,7 @@ import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import '../../app/router/app_router.dart';
 import '../../app/state/settings_state.dart';
 import '../../app/theme/app_glass_theme.dart';
+import '../common/app_default_text_style.dart';
 import '../common/glass_gate.dart';
 
 const _primaryNavigationRoutes = <String>[
@@ -139,9 +140,14 @@ class ModernNavigationBar extends StatelessWidget {
     // 监听它即可始终反映真实激活的 tab（含 push 出的详情页）。
     return ValueListenableBuilder<int>(
       valueListenable: primaryNavigationIndex,
-      builder: (context, index, _) => GlassGate(
-        original: _buildOriginal(context, index),
-        glass: _buildGlass(context, index),
+      builder: (context, index, _) => AppDefaultTextStyle(
+        // 底栏可能挂在没有 Material 祖先的外壳层（app_router 的 Stack），
+        // 组件自身保证基准文字样式，避免继承 MaterialApp 兜底样式的
+        // 黄色双下划线。
+        child: GlassGate(
+          original: _buildOriginal(context, index),
+          glass: _buildGlass(context, index),
+        ),
       ),
     );
   }
