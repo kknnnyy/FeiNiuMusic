@@ -304,7 +304,6 @@ class _DesktopLyricsStyleSheet extends StatefulWidget {
 }
 
 class _DesktopLyricsStyleSheetState extends State<_DesktopLyricsStyleSheet> {
-  late final TextEditingController _fontController;
   late final TextEditingController _textColorController;
   late final TextEditingController _highlightColorController;
   late double _fontSize;
@@ -314,9 +313,6 @@ class _DesktopLyricsStyleSheetState extends State<_DesktopLyricsStyleSheet> {
   @override
   void initState() {
     super.initState();
-    _fontController = TextEditingController(
-      text: DesktopLyricsSettings.fontFamily.value,
-    );
     _textColorController = TextEditingController(
       text: _toHex(DesktopLyricsSettings.textColor.value),
     );
@@ -330,7 +326,6 @@ class _DesktopLyricsStyleSheetState extends State<_DesktopLyricsStyleSheet> {
 
   @override
   void dispose() {
-    _fontController.dispose();
     _textColorController.dispose();
     _highlightColorController.dispose();
     super.dispose();
@@ -347,47 +342,12 @@ class _DesktopLyricsStyleSheetState extends State<_DesktopLyricsStyleSheet> {
           children: [
             Text('桌面歌词样式', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              initialValue: _fontChoices.contains(_fontController.text)
-                  ? _fontController.text
-                  : '',
-              decoration: const InputDecoration(
-                labelText: '字体',
-                border: OutlineInputBorder(),
-              ),
-              items: _fontChoices
-                  .map(
-                    (family) => DropdownMenuItem<String>(
-                      value: family,
-                      child: Text(
-                        family.isEmpty ? '系统默认' : family,
-                        style: family.isEmpty
-                            ? null
-                            : TextStyle(fontFamily: family),
-                      ),
-                    ),
-                  )
-                  .toList(),
+            SystemFontPicker(
+              value: DesktopLyricsSettings.fontFamily.value,
               onChanged: (value) {
-                if (value == null) return;
-                _fontController.text = value;
                 DesktopLyricsSettings.setFontFamily(value);
                 setState(() {});
               },
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _fontController,
-              decoration: const InputDecoration(
-                labelText: '自定义字体名称（可选）',
-                hintText: '例如 PingFang SC、Microsoft YaHei、Noto Sans CJK SC',
-                helperText: '下拉列表提供常见系统字体；自定义名称不存在时会自动回退。',
-                border: OutlineInputBorder(),
-              ),
-              onSubmitted: (_) =>
-                  DesktopLyricsSettings.setFontFamily(_fontController.text),
-              onEditingComplete: () =>
-                  DesktopLyricsSettings.setFontFamily(_fontController.text),
             ),
             const SizedBox(height: 8),
             AppSettingSlider(
@@ -494,40 +454,4 @@ class _DesktopLyricsStyleSheetState extends State<_DesktopLyricsStyleSheet> {
 
   String _toHex(int value) =>
       '#${value.toRadixString(16).padLeft(8, '0').toUpperCase()}';
-
-  List<String> get _fontChoices {
-    final choices = <String>[
-      '',
-      if (Platform.isMacOS) ...[
-        'PingFang SC',
-        'Hiragino Sans GB',
-        'SF Pro Display',
-        'Helvetica Neue',
-        'Optima',
-      ],
-      if (Platform.isWindows) ...[
-        'Microsoft YaHei',
-        'Microsoft YaHei UI',
-        'Segoe UI',
-        'Arial',
-        'Consolas',
-      ],
-      if (Platform.isLinux) ...[
-        'Noto Sans CJK SC',
-        'Noto Sans',
-        'DejaVu Sans',
-        'Liberation Sans',
-      ],
-      'Arial',
-      'Helvetica',
-      'Times New Roman',
-      'Georgia',
-      'Courier New',
-    ];
-    final current = _fontController.text.trim();
-    if (current.isNotEmpty && !choices.contains(current)) {
-      choices.insert(1, current);
-    }
-    return choices.toSet().toList();
-  }
 }

@@ -1,6 +1,11 @@
 #include "my_application.h"
 
 #include <flutter_linux/flutter_linux.h>
+#include <pango/pangocairo.h>
+
+#include <algorithm>
+#include <string>
+#include <vector>
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
 #endif
@@ -11,6 +16,7 @@
 struct _MyApplication {
   GtkApplication parent_instance;
   char** dart_entrypoint_arguments;
+  FlMethodChannel* system_fonts_channel;
 };
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
@@ -18,6 +24,39 @@ G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 // Called when first Flutter frame received.
 static void first_frame_cb(MyApplication* self, FlView* view) {
   gtk_widget_show(gtk_widget_get_toplevel(GTK_WIDGET(view)));
+}
+
+static void system_fonts_method_call_cb(FlMethodChannel*,
+                                        FlMethodCall* method_call, gpointer) {
+  g_autoptr(FlMethodResponse) response = nullptr;
+  if (strcmp(fl_method_call_get_name(method_call), "getFamilies") != 0) {
+    response = FL_METHOD_RESPONSE(fl_method_not_implemented_response_new());
+    fl_method_call_respond(method_call, response, nullptr);
+    return;
+  }
+
+  PangoFontFamily** native_families = nullptr;
+  int family_count = 0;
+  pango_font_map_list_families(pango_cairo_font_map_get_default(),
+                               &native_families, &family_count);
+  std::vector<std::string> families;
+  families.reserve(family_count);
+  for (int index = 0; index < family_count; ++index) {
+    const char* name = pango_font_family_get_name(native_families[index]);
+    if (name != nullptr && name[0] != '\0') {
+      families.emplace_back(name);
+    }
+  }
+  g_free(native_families);
+  std::sort(families.begin(), families.end());
+  families.erase(std::unique(families.begin(), families.end()), families.end());
+
+  g_autoptr(FlValue) result = fl_value_new_list();
+  for (const auto& family : families) {
+    fl_value_append_take(result, fl_value_new_string(family.c_str()));
+  }
+  response = FL_METHOD_RESPONSE(fl_method_success_response_new(result));
+  fl_method_call_respond(method_call, response, nullptr);
 }
 
 // Implements GApplication::activate.
@@ -75,6 +114,14 @@ static void my_application_activate(GApplication* application) {
   gtk_widget_realize(GTK_WIDGET(view));
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
+  g_autoptr(FlStandardMethodCodec) system_fonts_codec =
+      fl_standard_method_codec_new();
+  g_clear_object(&self->system_fonts_channel);
+  self->system_fonts_channel = fl_method_channel_new(
+      fl_engine_get_binary_messenger(fl_view_get_engine(view)),
+      "com.feiniu.music/system_fonts", FL_METHOD_CODEC(system_fonts_codec));
+  fl_method_channel_set_method_call_handler(
+      self->system_fonts_channel, system_fonts_method_call_cb, nullptr, nullptr);
   desktop_multi_window_plugin_set_window_created_callback(
       [](FlPluginRegistry* registry) { fl_register_plugins(registry); });
 
@@ -124,6 +171,7 @@ static void my_application_shutdown(GApplication* application) {
 static void my_application_dispose(GObject* object) {
   MyApplication* self = MY_APPLICATION(object);
   g_clear_pointer(&self->dart_entrypoint_arguments, g_strfreev);
+  g_clear_object(&self->system_fonts_channel);
   G_OBJECT_CLASS(my_application_parent_class)->dispose(object);
 }
 
