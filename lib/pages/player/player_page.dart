@@ -17,6 +17,7 @@ import '../../components/common/artwork_widget.dart';
 import '../../components/feedback/app_toast.dart';
 import '../../components/player/lyric_preview.dart';
 import 'lyrics/lyric_view.dart';
+import 'widgets/cast_button.dart';
 import 'widgets/player_background.dart';
 import 'widgets/player_bottom_panel.dart';
 import 'widgets/player_header.dart';
@@ -720,6 +721,17 @@ class _PosterArtwork extends StatelessWidget {
                     ],
                     stops: const [0.0, 0.45],
                   ),
+                ),
+              ),
+              Positioned(
+                top: topPad + 8,
+                right: 12,
+                child: Material(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.surface.withValues(alpha: 0.72),
+                  shape: const CircleBorder(),
+                  child: CastButton(songSignal: songSignal),
                 ),
               ),
             ],
