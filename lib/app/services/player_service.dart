@@ -35,6 +35,13 @@ import '../../components/feedback/app_toast.dart';
 export '../state/player_state.dart';
 import '../state/player_state.dart';
 
+@visibleForTesting
+bool shouldTryForcedTranscodeBeforeOriginalCache({
+  required bool isForcedTranscode,
+  required bool forceDirect,
+  required bool transcodeFailed,
+}) => isForcedTranscode && !forceDirect && !transcodeFailed;
+
 class PlayerService with WidgetsBindingObserver {
   static final PlayerService instance = PlayerService._internal();
   static const Duration _resolvedSourceTtl = Duration(minutes: 10);
@@ -2870,6 +2877,11 @@ class PlayerService with WidgetsBindingObserver {
     svc.invalidate(song.id);
     svc.clearDowngradeFor(song.id);
     _transcodeFailedSongIds.remove(song.id);
+    // 当前歌即将重新选源，先撤销旧播放链路的展示；新转码源解析成功后
+    // _transcodedSourceFor 会写入实际 codec，失败回退直连时则保持 null。
+    _activeTranscodeHlsUrl = null;
+    _activeTranscodeCodec = null;
+    playbackTranscodeCodec.value = null;
     final seekPos = position.value;
     final wasPlaying = isPlaying.value;
     _applyEngineKinds(await _computeEngineKinds(queue.value));
@@ -2893,6 +2905,9 @@ class PlayerService with WidgetsBindingObserver {
     FeiNiuTranscodeService.instance.invalidate(song.id);
     FeiNiuTranscodeService.instance.clearDowngradeFor(song.id);
     _transcodeFailedSongIds.remove(song.id);
+    _activeTranscodeHlsUrl = null;
+    _activeTranscodeCodec = null;
+    playbackTranscodeCodec.value = null;
     final seekPos = position.value;
     final wasPlaying = isPlaying.value;
     _applyEngineKinds(await _computeEngineKinds(queue.value));
@@ -4045,12 +4060,23 @@ class PlayerService with WidgetsBindingObserver {
       // CUE 整轨曲目：不命中/不写入整轨文件下载缓存（否则每首 CUE 曲会把
       // 同一镜像各缓存一份），直接直连流，由下方 ClippingAudioSource 裁剪。
       final isCue = song.isCue;
+      final isForcedTranscode = FeiNiuTranscodeService.instance
+          .isForcedTranscode(song.id);
 
-      // 命中优先级（转码歌）：
-      // 1. 原始完整缓存 → 本地文件（零带宽，最高优先）
-      // 2. 转码完整缓存（tc_<id>_<codec>.mp4）→ 本地文件（零流量）
-      // 3. 转码 HLS 在线（m3u8 → ExoPlayer 播 fMP4）
-      // 4. 流式缓存源 / 直连（现有兜底）
+      // 默认命中优先级：原始完整缓存 → 转码完整缓存 → 转码 HLS →
+      // 流式缓存源/直连。手动强制转码是例外，会先尝试转码源。
+      // 面板手动选择 OPUS/MP3 是对当前播放源的显式覆盖，必须先尝试转码；
+      // 否则命中原始完整缓存后会提前返回，实际仍直连，播放页规格也一直显示
+      // “直连”。转码失败时继续向下回退原始缓存/直连，保留可播放性。
+      if (shouldTryForcedTranscodeBeforeOriginalCache(
+        isForcedTranscode: isForcedTranscode,
+        forceDirect: _forceDirectSongIds.contains(song.id),
+        transcodeFailed: _transcodeFailedSongIds.contains(song.id),
+      )) {
+        final forcedSource = await _transcodedSourceFor(song);
+        if (forcedSource != null) return forcedSource;
+      }
+
       if (!isCue && StreamCacheService.instance.isEnabled) {
         final complete = await StreamCacheService.instance.completeFileFor(
           song.id,
@@ -4067,7 +4093,8 @@ class PlayerService with WidgetsBindingObserver {
       // **CUE 曲也走转码**：服务器按 guid 返回裁切好的单曲 HLS，无需裁剪；
       // 转码失败才落回下方 CUE 直连 + ClippingAudioSource 裁剪。
       if (!_forceDirectSongIds.contains(song.id) &&
-          !_transcodeFailedSongIds.contains(song.id)) {
+          !_transcodeFailedSongIds.contains(song.id) &&
+          !isForcedTranscode) {
         final hls = await _transcodedSourceFor(song);
         if (hls != null) return hls;
       }

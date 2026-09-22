@@ -62,14 +62,14 @@ void main() {
     );
   });
 
-  test('new installations default to OPUS and present quality choices in order', () async {
+  test('new installations default to MP3 and present quality choices in order', () async {
     SharedPreferences.setMockInitialValues({});
     AppTranscodeSettings.resetForTest();
     await AppTranscodeSettings.ensureLoaded();
-    expect(AppTranscodeSettings.format.value, TranscodeFormat.opus);
+    expect(AppTranscodeSettings.format.value, TranscodeFormat.mp3);
     expect(
-      AppTranscodeSettings.availableFormats,
-      [TranscodeFormat.opus, TranscodeFormat.mp3],
+      TranscodeFormat.values,
+      [TranscodeFormat.mp3, TranscodeFormat.opus, TranscodeFormat.flac],
     );
   });
 

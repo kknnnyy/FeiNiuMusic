@@ -141,6 +141,7 @@ class _TranscodeSettingsPageState extends State<TranscodeSettingsPage> {
 
   Widget _buildFormatTile(BuildContext context, TranscodeFormat format) {
     const labels = {
+      TranscodeFormat.flac: 'FLAC',
       TranscodeFormat.mp3: 'MP3',
       TranscodeFormat.opus: 'OPUS',
     };
@@ -158,7 +159,7 @@ class _TranscodeSettingsPageState extends State<TranscodeSettingsPage> {
             width: double.infinity,
             child: SegmentedButton<TranscodeFormat>(
               segments: [
-                for (final f in AppTranscodeSettings.availableFormats)
+                for (final f in TranscodeFormat.values)
                   ButtonSegment(
                     value: f,
                     label: Text(labels[f] ?? f.name),
@@ -173,7 +174,7 @@ class _TranscodeSettingsPageState extends State<TranscodeSettingsPage> {
           ),
           const SizedBox(height: 8),
           Text(
-            '默认使用 OPUS；MP3 作为兼容性备选。无损源文件不转为 FLAC。',
+            'MP3 兼容性优先；OPUS 更省流量；FLAC 保留无损',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
