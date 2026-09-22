@@ -2,7 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 转码输出格式。
-enum TranscodeFormat { mp3, opus, flac }
+///
+/// [flac] 仅为旧版本配置和兼容测试保留，不再作为用户可选目标格式。
+enum TranscodeFormat { opus, mp3, flac }
 
 /// 转码设置。
 ///
@@ -12,8 +14,8 @@ enum TranscodeFormat { mp3, opus, flac }
 ///   无损，忽略 [thresholdMb]）；关 → 仅超过 [thresholdMb] 的文件转码。
 /// - [thresholdMb]「转码文件大小」：默认 80MB（20–500），仅「全部转码」关闭
 ///   时生效；未识别大小的文件不转码。
-/// - [format]「转码格式」：flac 无损（带 bitrate:320）/ mp3 / opus（不带
-///   bitrate——带 bitrate 会显著劣化音质）。
+/// - [format]「转码格式」：默认 OPUS，其次 MP3；不提供 FLAC 目标，避免无损源
+///   做无意义的无损转码。
 /// - [directOnWifi]「Wi-Fi 下直连」：默认关闭；开启后仅自动转码在 Wi-Fi 下
 ///   跳过，单曲手动指定转码格式仍然生效。
 class AppTranscodeSettings {
@@ -27,11 +29,17 @@ class AppTranscodeSettings {
   static const int minThresholdMb = 20;
   static const int maxThresholdMb = 500;
 
+  /// 用户可选择的转码目标格式。FLAC 仅保留用于读取旧配置/兼容旧会话。
+  static const availableFormats = <TranscodeFormat>[
+    TranscodeFormat.opus,
+    TranscodeFormat.mp3,
+  ];
+
   static final ValueNotifier<bool> enabled = ValueNotifier(false);
   static final ValueNotifier<bool> transcodeAll = ValueNotifier(true);
   static final ValueNotifier<int> thresholdMb = ValueNotifier(defaultThresholdMb);
   static final ValueNotifier<TranscodeFormat> format =
-      ValueNotifier(TranscodeFormat.mp3);
+      ValueNotifier(TranscodeFormat.opus);
   static final ValueNotifier<bool> directOnWifi = ValueNotifier(false);
 
   static Future<void>? _loading;
@@ -46,10 +54,11 @@ class AppTranscodeSettings {
         (prefs.getInt(_prefsThresholdMb) ?? defaultThresholdMb)
             .clamp(minThresholdMb, maxThresholdMb);
     final saved = prefs.getString(_prefsFormat);
-    format.value = TranscodeFormat.values.firstWhere(
-      (f) => f.name == saved,
-      orElse: () => TranscodeFormat.mp3,
-    );
+    format.value = switch (saved) {
+      'mp3' => TranscodeFormat.mp3,
+      'opus' => TranscodeFormat.opus,
+      _ => TranscodeFormat.opus,
+    };
     directOnWifi.value = prefs.getBool(_prefsDirectOnWifi) ?? false;
   }
 
@@ -90,7 +99,7 @@ class AppTranscodeSettings {
     enabled.value = false;
     transcodeAll.value = true;
     thresholdMb.value = defaultThresholdMb;
-    format.value = TranscodeFormat.mp3;
+    format.value = TranscodeFormat.opus;
     directOnWifi.value = false;
   }
 }

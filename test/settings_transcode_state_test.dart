@@ -22,4 +22,18 @@ void main() {
     await AppTranscodeSettings.ensureLoaded();
     expect(AppTranscodeSettings.directOnWifi.value, isTrue);
   });
+
+  test('默认转码格式为 OPUS，旧 FLAC 配置迁移为 OPUS', () async {
+    await AppTranscodeSettings.ensureLoaded();
+    expect(AppTranscodeSettings.format.value, TranscodeFormat.opus);
+    expect(AppTranscodeSettings.availableFormats, [
+      TranscodeFormat.opus,
+      TranscodeFormat.mp3,
+    ]);
+
+    SharedPreferences.setMockInitialValues({'transcode_format': 'flac'});
+    AppTranscodeSettings.resetForTest();
+    await AppTranscodeSettings.ensureLoaded();
+    expect(AppTranscodeSettings.format.value, TranscodeFormat.opus);
+  });
 }
