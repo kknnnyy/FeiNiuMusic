@@ -17,6 +17,7 @@ import '../../components/common/artwork_widget.dart';
 import '../../components/feedback/app_toast.dart';
 import '../../components/player/lyric_preview.dart';
 import 'lyrics/lyric_view.dart';
+import 'widgets/player_audio_spec.dart';
 import 'widgets/player_background.dart';
 import 'widgets/player_bottom_panel.dart';
 import 'widgets/player_header.dart';
@@ -609,6 +610,7 @@ class _PosterPlayerLayout extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     _PosterSeekBar(player: player),
+                    PlayerAudioSpec(songListenable: player.currentSong),
                     const SizedBox(height: 20),
                     // 播放控制：行宽与轨道对齐（两端内缩 _posterTrackInset）。
                     Padding(
