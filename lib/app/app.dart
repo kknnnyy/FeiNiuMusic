@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart' as shad;
 
+import '../components/common/app_default_text_style.dart';
 import '../components/dialog/app_update_dialog.dart';
 import '../components/focus/tv_focus_scope.dart';
 import '../components/layout/tablet_layout_host.dart';
@@ -222,7 +223,13 @@ class FeiNiuMusicApp extends StatelessWidget {
                             Widget content =
                                 AnnotatedRegion<SystemUiOverlayStyle>(
                                   value: overlay,
-                                  child: child ?? const SizedBox.shrink(),
+                                  // App 级基础文字样式：MaterialApp 的兜底
+                                  // DefaultTextStyle 带黄色双下划线，外壳层
+                                  // 悬浮组件（共享底栏、平板迷你播放器等）
+                                  // 不在 Material 内会继承它。
+                                  child: AppDefaultTextStyle(
+                                    child: child ?? const SizedBox.shrink(),
+                                  ),
                                 );
                             // TV 模式：根焦点域（方向键遍历 + 快捷键）。
                             // 手机端 isTv=false，完全绕开，行为不变。
