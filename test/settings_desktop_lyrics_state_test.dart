@@ -44,4 +44,10 @@ void main() {
     expect(DesktopLyricsSettings.fontSize.value, 48);
     expect(DesktopLyricsSettings.backgroundOpacity.value, 0);
   });
+
+  test('桌面歌词默认跟随当前系统字体', () async {
+    await DesktopLyricsSettings.ensureLoaded();
+
+    expect(DesktopLyricsSettings.fontFamily.value, isEmpty);
+  });
 }

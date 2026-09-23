@@ -55,12 +55,10 @@ Future<void> _showWindow() async {
   await windowManager.show();
 }
 
-/// 点击穿透只在「锁定当前位置」时开启：此时窗口位置已固定并保存，
-/// 鼠标事件落到下层窗口；其余模式保持可交互，避免点击歌词时事件穿透到
-/// 桌面（macOS 会触发「点击墙纸显示桌面」，把所有窗口一起移开，
-/// 看起来就像歌词窗口被隐藏）或穿透到下层应用的按钮。
+/// 只有「自由拖动」模式需要接收鼠标事件。固定和锁定模式均点击穿透，
+/// 避免常驻在最前的歌词条遮住下层输入框或按钮。
 Future<void> _applyClickThrough(String? position) async {
-  final ignore = position == DesktopLyricsSettings.positionLocked;
+  final ignore = position != DesktopLyricsSettings.positionFree;
   await windowManager.setIgnoreMouseEvents(ignore, forward: ignore);
 }
 
@@ -216,6 +214,7 @@ class _DesktopLyricsSurfaceState extends State<_DesktopLyricsSurface> {
     );
     final opacity = ((payload['backgroundOpacity'] as num?)?.toDouble() ?? 0.64)
         .clamp(0.0, 0.9);
+    final draggable = payload['position'] == DesktopLyricsSettings.positionFree;
 
     final content = Container(
       width: double.infinity,
@@ -284,18 +283,24 @@ class _DesktopLyricsSurfaceState extends State<_DesktopLyricsSurface> {
       ),
     );
     return GestureDetector(
-      onPanStart: (_) async {
-        _windowPosition = await windowManager.getPosition();
-      },
-      onPanUpdate: (details) {
-        final origin = _windowPosition;
-        if (origin == null) return;
-        _windowPosition = origin + details.delta;
-        unawaited(windowManager.setPosition(_windowPosition!));
-      },
-      onPanEnd: (_) {
-        unawaited(_saveDraggedPosition());
-      },
+      onPanStart: draggable
+          ? (_) async {
+              _windowPosition = await windowManager.getPosition();
+            }
+          : null,
+      onPanUpdate: draggable
+          ? (details) {
+              final origin = _windowPosition;
+              if (origin == null) return;
+              _windowPosition = origin + details.delta;
+              unawaited(windowManager.setPosition(_windowPosition!));
+            }
+          : null,
+      onPanEnd: draggable
+          ? (_) {
+              unawaited(_saveDraggedPosition());
+            }
+          : null,
       child: content,
     );
   }

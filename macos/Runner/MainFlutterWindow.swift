@@ -8,6 +8,7 @@ private var childWindowChannels: [FlutterMethodChannel] = []
 
 class MainFlutterWindow: NSWindow, NSWindowDelegate {
   private var statusBarController: MacosStatusBarController?
+  private var systemFontsChannel: FlutterMethodChannel?
 
   /// 关闭按钮是否隐藏到菜单栏（由 Dart 通过 statusbar 通道推送，默认开启）。
   var closeToTray = true
@@ -56,6 +57,20 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
       flutterViewController?.backgroundColor = NSColor(
         srgbRed: r, green: g, blue: b, alpha: a)
       result(nil)
+    }
+
+    systemFontsChannel = FlutterMethodChannel(
+      name: "com.feiniu.music/system_fonts",
+      binaryMessenger: flutterViewController.engine.binaryMessenger)
+    systemFontsChannel?.setMethodCallHandler { call, result in
+      guard call.method == "getFamilies" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      let families = NSFontManager.shared.availableFontFamilies.sorted {
+        $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
+      }
+      result(families)
     }
 
     // 拦截窗口关闭：设置开启时隐藏到菜单栏而非关闭（见 windowShouldClose）。

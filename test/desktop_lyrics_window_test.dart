@@ -6,6 +6,7 @@ import 'package:feiniu_music/pages/player/desktop_lyrics_window.dart';
 Map<String, Object?> _payload({
   bool karaoke = false,
   String? fontFamily = 'PingFang SC',
+  String position = 'fixed',
 }) {
   return {
     'currentLine': '当前歌词',
@@ -17,6 +18,7 @@ Map<String, Object?> _payload({
     'textColor': 0xFFFFFFFF,
     'highlightColor': 0xFF59F7E7,
     'backgroundOpacity': 0.64,
+    'position': position,
   };
 }
 
@@ -27,7 +29,9 @@ List<TextStyle> _resolvedStylesOf(WidgetTester tester, String text) {
   expect(finder, findsWidgets, reason: '未找到歌词文本 $text');
   final styles = <TextStyle>[];
   for (var index = 0; index < finder.evaluate().length; index++) {
-    final inherited = DefaultTextStyle.of(tester.element(finder.at(index))).style;
+    final inherited = DefaultTextStyle.of(
+      tester.element(finder.at(index)),
+    ).style;
     final own = tester.widget<Text>(finder.at(index)).style;
     styles.add(own == null ? inherited : inherited.merge(own));
   }
@@ -92,11 +96,34 @@ void main() {
       closeTo(base.left, 0.5),
       reason: '高亮层左边缘应与底字对齐（当前 left=${highlight.left}, 底字 left=${base.left}）',
     );
-    expect(
-      highlight.top,
-      closeTo(base.top, 0.5),
-      reason: '高亮层应与底字同一行',
-    );
+    expect(highlight.top, closeTo(base.top, 0.5), reason: '高亮层应与底字同一行');
     expect(highlight.width, closeTo(base.width, 0.5));
+  });
+
+  testWidgets('固定位置不接收拖动手势', (tester) async {
+    final state = DesktopLyricsWindowState()..update(_payload());
+
+    await tester.pumpWidget(DesktopLyricsWindow(state: state));
+
+    final gesture = tester.widget<GestureDetector>(
+      find.byType(GestureDetector),
+    );
+    expect(gesture.onPanStart, isNull);
+    expect(gesture.onPanUpdate, isNull);
+    expect(gesture.onPanEnd, isNull);
+  });
+
+  testWidgets('只有自由拖动模式接收拖动手势', (tester) async {
+    final state = DesktopLyricsWindowState()
+      ..update(_payload(position: 'free'));
+
+    await tester.pumpWidget(DesktopLyricsWindow(state: state));
+
+    final gesture = tester.widget<GestureDetector>(
+      find.byType(GestureDetector),
+    );
+    expect(gesture.onPanStart, isNotNull);
+    expect(gesture.onPanUpdate, isNotNull);
+    expect(gesture.onPanEnd, isNotNull);
   });
 }

@@ -22,7 +22,8 @@ class DesktopLyricsSettings {
   static const String positionFree = 'free';
   static const String positionLocked = 'locked';
 
-  static const String defaultFontFamily = 'Optima-Regular';
+  /// Empty means using the current platform's native default font.
+  static const String defaultFontFamily = '';
   static const double defaultFontSize = 24;
   static const int defaultTextColor = 0xFFFFFFFF;
   static const int defaultHighlightColor = 0xFF59F7E7;

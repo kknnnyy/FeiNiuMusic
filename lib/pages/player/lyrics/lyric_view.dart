@@ -38,6 +38,7 @@ class PlayerLyricsView extends StatefulWidget {
 class _PlayerLyricsViewState extends State<PlayerLyricsView> with SignalsMixin {
   static const String _prefsFontSize = 'lyrics_view_font_size';
   static const String _prefsActiveFontSize = 'lyrics_view_active_font_size';
+  static const String _prefsFontFamily = 'lyrics_view_font_family';
   static const String _prefsLineGap = 'lyrics_view_line_gap';
   static const String _prefsAlignment = 'lyrics_view_alignment';
   static const String _prefsShowTranslation = 'lyrics_view_show_translation';
@@ -59,6 +60,7 @@ class _PlayerLyricsViewState extends State<PlayerLyricsView> with SignalsMixin {
   late final _miniAlignment = createSignal('center');
   late final _fontSize = createSignal(16.0);
   late final _activeFontSize = createSignal(20.0);
+  late final _fontFamily = createSignal('');
   late final _lineGap = createSignal(14.0);
   late final _alignment = createSignal('center');
   late final _inactiveColorValue = createSignal<int?>(null);
@@ -129,6 +131,7 @@ class _PlayerLyricsViewState extends State<PlayerLyricsView> with SignalsMixin {
     _miniAlignment.value = prefs.getString(_prefsMiniAlignment) ?? 'center';
     _fontSize.value = prefs.getDouble(_prefsFontSize) ?? 16;
     _activeFontSize.value = prefs.getDouble(_prefsActiveFontSize) ?? 20;
+    _fontFamily.value = prefs.getString(_prefsFontFamily) ?? '';
     _lineGap.value = prefs.getDouble(_prefsLineGap) ?? 14;
     _alignment.value = prefs.getString(_prefsAlignment) ?? 'center';
     _inactiveColorValue.value = prefs.getInt(_prefsInactiveColor);
@@ -222,6 +225,7 @@ class _PlayerLyricsViewState extends State<PlayerLyricsView> with SignalsMixin {
               builder: (context) {
                 final fontSize = _fontSize.value;
                 final activeFontSize = _activeFontSize.value;
+                final fontFamily = _fontFamily.value;
                 final lineGap = _lineGap.value;
                 final alignment = _alignment.value;
                 final dragLyrics = _dragLyrics.value;
@@ -245,6 +249,17 @@ class _PlayerLyricsViewState extends State<PlayerLyricsView> with SignalsMixin {
                           title: '样式',
                           showDividers: false,
                           children: [
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                              child: SystemFontPicker(
+                                label: '歌词字体',
+                                value: fontFamily,
+                                onChanged: (value) {
+                                  _fontFamily.value = value;
+                                  _setPrefString(_prefsFontFamily, value);
+                                },
+                              ),
+                            ),
                             LabeledSlider(
                               title: '字号',
                               value: fontSize,
@@ -536,6 +551,10 @@ class _PlayerLyricsViewState extends State<PlayerLyricsView> with SignalsMixin {
         final fontSizeScale = isTv ? 1.4 : 1.0;
         final rawFontSize = _fontSize.value;
         final rawActiveFontSize = _activeFontSize.value;
+        final configuredFontFamily = _fontFamily.value.trim();
+        final fontFamily = configuredFontFamily.isEmpty
+            ? null
+            : configuredFontFamily;
         final rawLineGap = _lineGap.value;
         final fontSize = rawFontSize * fontSizeScale;
         final activeFontSize = rawActiveFontSize * fontSizeScale;
@@ -589,210 +608,209 @@ class _PlayerLyricsViewState extends State<PlayerLyricsView> with SignalsMixin {
                         ],
                 ).createShader(rect),
                 child: LyricsDragToSeek(
-                    enabled: dragLyrics,
-                    player: player,
-                    lyrics: lyrics,
-                    child: () {
-                      final hasLines = model?.lines.isNotEmpty ?? false;
-                      if (snap.status == LyricsLoadStatus.loading &&
-                          !hasLines) {
-                        return const SizedBox.shrink();
-                      }
-                      if (!hasLines) {
-                        return Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                '暂无歌词',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  color: onSurface.withValues(alpha: 0.8),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                '纯音乐或未匹配到歌词',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: onSurface.withValues(alpha: 0.6),
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }
-                      final hasKaraokeWords = model!.lines.any(
-                        (line) => line.words?.isNotEmpty ?? false,
-                      );
-                      final karaokeMode = forceKaraoke || hasKaraokeWords;
-                      final inactiveColor =
-                          LyricsViewColors.customColorOrDefault(
-                            _inactiveColorValue.value,
-                            LyricsViewColors.defaultInactiveColor(context),
-                          );
-                      final activeColor = LyricsViewColors.customColorOrDefault(
-                        _activeColorValue.value,
-                        LyricsViewColors.defaultActiveColor(context),
-                      );
-                      final highlightColor =
-                          LyricsViewColors.customColorOrDefault(
-                            _highlightColorValue.value,
-                            LyricsViewColors.defaultHighlightColor(context),
-                          );
-                      final isLight = theme.brightness == Brightness.light;
-                      final karaokeBaseColor =
-                          LyricsViewColors.karaokeBaseColor(
-                            context,
-                            inactiveColor: inactiveColor,
-                          );
-
-                      final translationStyle = showTranslation
-                          ? TextStyle(
-                              color: isLight
-                                  ? const Color(0xFF7A7A7A)
-                                  : onSurface.withValues(alpha: 0.35),
-                              fontSize: fontSize * 0.85,
-                              height: 1.2,
-                            )
-                          : const TextStyle(
-                              color: Colors.transparent,
-                              fontSize: 0,
-                              height: 0,
-                            );
-
-                      final style = LyricStyle(
-                        textStyle: TextStyle(
-                          color: inactiveColor,
-                          fontSize: fontSize,
-                          height: 1.3,
-                        ),
-                        activeStyle: TextStyle(
-                          color: karaokeMode ? karaokeBaseColor : activeColor,
-                          fontSize: activeFontSize,
-                          fontWeight: FontWeight.w700,
-                          height: 1.3,
-                        ),
-                        translationStyle: translationStyle,
-                        translationActiveColor: showTranslation
-                            ? onSurface.withValues(alpha: 0.9)
-                            : Colors.transparent,
-                        lineTextAlign: _lineTextAlign(),
-                        contentAlignment: _contentAlignment(),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 12,
-                        ),
-                        lineGap: lineGap,
-                        translationLineGap: showTranslation ? 8 : 0,
-                        selectionAnchorPosition: 0.5,
-                        activeAnchorPosition: 0.5,
-                        selectionAlignment: MainAxisAlignment.center,
-                        activeAlignment: MainAxisAlignment.center,
-                        scrollDuration: const Duration(milliseconds: 380),
-                        scrollCurve: Curves.easeOutCubic,
-                        selectedColor: activeColor,
-                        selectedTranslationColor: onSurface.withValues(
-                          alpha: 0.9,
-                        ),
-                        selectionAutoResumeDuration: const Duration(
-                          milliseconds: 200,
-                        ),
-                        activeAutoResumeDuration: isPlaying
-                            ? const Duration(seconds: 3)
-                            : const Duration(days: 365),
-                        disableTouchEvent: !dragLyrics,
-                        enableSwitchAnimation: false,
-                        activeHighlightGradient: karaokeMode
-                            ? LinearGradient(
-                                colors: [
-                                  highlightColor.withValues(alpha: 1.0),
-                                  highlightColor.withValues(alpha: 1.0),
-                                ],
-                              )
-                            : null,
-                        activeHighlightExtraFadeWidth: 0,
-                      );
-                      return Stack(
-                        children: [
-                          fl.LyricView(
-                            controller: lyrics.controller,
-                            style: style,
-                          ),
-                          if (!dragLyrics || !selecting)
-                            const SizedBox.shrink()
-                          else
-                            Align(
-                              alignment: Alignment.center,
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                ),
-                                child: SizedBox(
-                                  height: 44,
-                                  child: () {
-                                    final m = model;
-                                    final showDetails =
-                                        index >= 0 && index < m.lines.length;
-                                    final timeText = showDetails
-                                        ? "${m.lines[index].start.inMinutes.toString().padLeft(2, '0')}:${(m.lines[index].start.inSeconds % 60).toString().padLeft(2, '0')}"
-                                        : '';
-                                    return Row(
-                                      children: [
-                                        if (showDetails)
-                                          Text(
-                                            timeText,
-                                            style: TextStyle(
-                                              color: activeColor,
-                                              fontSize: 15,
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                        if (showDetails)
-                                          const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Container(
-                                            height: 1,
-                                            color: centered
-                                                ? Colors.transparent
-                                                : onSurface.withValues(
-                                                    alpha: 0.25,
-                                                  ),
-                                          ),
-                                        ),
-                                        if (showDetails)
-                                          const SizedBox(width: 8),
-                                        if (showDetails && dragSeek)
-                                          GestureDetector(
-                                            behavior: HitTestBehavior.opaque,
-                                            onTap: () {
-                                              if (index < 0 ||
-                                                  index >= m.lines.length) {
-                                                return;
-                                              }
-                                              final start =
-                                                  m.lines[index].start;
-                                              lyrics.controller.stopSelection();
-                                              player.seek(start);
-                                            },
-                                            child: Icon(
-                                              Icons.play_arrow_rounded,
-                                              size: 32,
-                                              color: activeColor,
-                                            ),
-                                          ),
-                                      ],
-                                    );
-                                  }(),
-                                ),
+                  enabled: dragLyrics,
+                  player: player,
+                  lyrics: lyrics,
+                  child: () {
+                    final hasLines = model?.lines.isNotEmpty ?? false;
+                    if (snap.status == LyricsLoadStatus.loading && !hasLines) {
+                      return const SizedBox.shrink();
+                    }
+                    if (!hasLines) {
+                      return Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '暂无歌词',
+                              style: TextStyle(
+                                fontFamily: fontFamily,
+                                fontSize: 16,
+                                color: onSurface.withValues(alpha: 0.8),
                               ),
                             ),
-                        ],
+                            const SizedBox(height: 8),
+                            Text(
+                              '纯音乐或未匹配到歌词',
+                              style: TextStyle(
+                                fontFamily: fontFamily,
+                                fontSize: 14,
+                                color: onSurface.withValues(alpha: 0.6),
+                              ),
+                            ),
+                          ],
+                        ),
                       );
-                    }(),
-                  ),
+                    }
+                    final hasKaraokeWords = model!.lines.any(
+                      (line) => line.words?.isNotEmpty ?? false,
+                    );
+                    final karaokeMode = forceKaraoke || hasKaraokeWords;
+                    final inactiveColor = LyricsViewColors.customColorOrDefault(
+                      _inactiveColorValue.value,
+                      LyricsViewColors.defaultInactiveColor(context),
+                    );
+                    final activeColor = LyricsViewColors.customColorOrDefault(
+                      _activeColorValue.value,
+                      LyricsViewColors.defaultActiveColor(context),
+                    );
+                    final highlightColor =
+                        LyricsViewColors.customColorOrDefault(
+                          _highlightColorValue.value,
+                          LyricsViewColors.defaultHighlightColor(context),
+                        );
+                    final isLight = theme.brightness == Brightness.light;
+                    final karaokeBaseColor = LyricsViewColors.karaokeBaseColor(
+                      context,
+                      inactiveColor: inactiveColor,
+                    );
+
+                    final translationStyle = showTranslation
+                        ? TextStyle(
+                            fontFamily: fontFamily,
+                            color: isLight
+                                ? const Color(0xFF7A7A7A)
+                                : onSurface.withValues(alpha: 0.35),
+                            fontSize: fontSize * 0.85,
+                            height: 1.2,
+                          )
+                        : const TextStyle(
+                            color: Colors.transparent,
+                            fontSize: 0,
+                            height: 0,
+                          );
+
+                    final style = LyricStyle(
+                      textStyle: TextStyle(
+                        fontFamily: fontFamily,
+                        color: inactiveColor,
+                        fontSize: fontSize,
+                        height: 1.3,
+                      ),
+                      activeStyle: TextStyle(
+                        fontFamily: fontFamily,
+                        color: karaokeMode ? karaokeBaseColor : activeColor,
+                        fontSize: activeFontSize,
+                        fontWeight: FontWeight.w700,
+                        height: 1.3,
+                      ),
+                      translationStyle: translationStyle,
+                      translationActiveColor: showTranslation
+                          ? onSurface.withValues(alpha: 0.9)
+                          : Colors.transparent,
+                      lineTextAlign: _lineTextAlign(),
+                      contentAlignment: _contentAlignment(),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 12,
+                      ),
+                      lineGap: lineGap,
+                      translationLineGap: showTranslation ? 8 : 0,
+                      selectionAnchorPosition: 0.5,
+                      activeAnchorPosition: 0.5,
+                      selectionAlignment: MainAxisAlignment.center,
+                      activeAlignment: MainAxisAlignment.center,
+                      scrollDuration: const Duration(milliseconds: 380),
+                      scrollCurve: Curves.easeOutCubic,
+                      selectedColor: activeColor,
+                      selectedTranslationColor: onSurface.withValues(
+                        alpha: 0.9,
+                      ),
+                      selectionAutoResumeDuration: const Duration(
+                        milliseconds: 200,
+                      ),
+                      activeAutoResumeDuration: isPlaying
+                          ? const Duration(seconds: 3)
+                          : const Duration(days: 365),
+                      disableTouchEvent: !dragLyrics,
+                      enableSwitchAnimation: false,
+                      activeHighlightGradient: karaokeMode
+                          ? LinearGradient(
+                              colors: [
+                                highlightColor.withValues(alpha: 1.0),
+                                highlightColor.withValues(alpha: 1.0),
+                              ],
+                            )
+                          : null,
+                      activeHighlightExtraFadeWidth: 0,
+                    );
+                    return Stack(
+                      children: [
+                        fl.LyricView(
+                          controller: lyrics.controller,
+                          style: style,
+                        ),
+                        if (!dragLyrics || !selecting)
+                          const SizedBox.shrink()
+                        else
+                          Align(
+                            alignment: Alignment.center,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
+                              child: SizedBox(
+                                height: 44,
+                                child: () {
+                                  final m = model;
+                                  final showDetails =
+                                      index >= 0 && index < m.lines.length;
+                                  final timeText = showDetails
+                                      ? "${m.lines[index].start.inMinutes.toString().padLeft(2, '0')}:${(m.lines[index].start.inSeconds % 60).toString().padLeft(2, '0')}"
+                                      : '';
+                                  return Row(
+                                    children: [
+                                      if (showDetails)
+                                        Text(
+                                          timeText,
+                                          style: TextStyle(
+                                            color: activeColor,
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      if (showDetails) const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Container(
+                                          height: 1,
+                                          color: centered
+                                              ? Colors.transparent
+                                              : onSurface.withValues(
+                                                  alpha: 0.25,
+                                                ),
+                                        ),
+                                      ),
+                                      if (showDetails) const SizedBox(width: 8),
+                                      if (showDetails && dragSeek)
+                                        GestureDetector(
+                                          behavior: HitTestBehavior.opaque,
+                                          onTap: () {
+                                            if (index < 0 ||
+                                                index >= m.lines.length) {
+                                              return;
+                                            }
+                                            final start = m.lines[index].start;
+                                            lyrics.controller.stopSelection();
+                                            player.seek(start);
+                                          },
+                                          child: Icon(
+                                            Icons.play_arrow_rounded,
+                                            size: 32,
+                                            color: activeColor,
+                                          ),
+                                        ),
+                                    ],
+                                  );
+                                }(),
+                              ),
+                            ),
+                          ),
+                      ],
+                    );
+                  }(),
                 ),
               ),
+            ),
             // 词/译 切换栏
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 8, 24, 4),
@@ -835,10 +853,7 @@ class _PlayerLyricsViewState extends State<PlayerLyricsView> with SignalsMixin {
         ],
       );
     }
-    return [
-      controls,
-      SizedBox(height: bottomSpacing),
-    ];
+    return [controls, SizedBox(height: bottomSpacing)];
   }
 }
 
