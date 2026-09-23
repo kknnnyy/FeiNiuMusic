@@ -565,15 +565,9 @@ class _HomePageState extends State<HomePage>
   }
 
   void _openSongsPage() {
-    // 从首页「最新歌曲」进入：一次性按创建时间降序（不回写偏好，仅本次有效）
-    Navigator.of(context).push(
-      buildAppPageRoute<void>(
-        (_) => const SongsPage(
-          initialSortKey: 'duration',
-          initialAscending: false,
-        ),
-      ),
-    );
+    Navigator.of(
+      context,
+    ).push(buildAppPageRoute<void>((_) => const SongsPage()));
   }
 
   void _openArtistsPage() {
