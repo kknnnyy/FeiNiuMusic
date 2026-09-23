@@ -13,7 +13,7 @@ import 'api_client.dart';
 /// - **转码 HLS**（`transcodeHlsUrlFor`）：对需转码的歌请求服务器转码，返回
 ///   m3u8 绝对地址，按 `songId|codec` 缓存（TTL），并跟踪活动会话
 ///   （`activeTranscodeIds`）供切歌/停止时 quit 释放。
-/// - **降级**（`markDowngradeToMp3`）：flac 转码 ExoPlayer 解析失败时降级 mp3
+/// - **降级**（`markDowngradeToMp3`）：OPUS（兼容旧 FLAC）转码解析失败时降级 MP3
 ///   重新转码。
 ///
 /// 说明：**转码 HLS 只喂 just_audio**（ExoPlayer）。media_kit 的 mpv FFmpeg
@@ -377,8 +377,8 @@ class FeiNiuTranscodeService {
 
   bool isDowngradedToMp3(String songId) => _downgradedToMp3.contains(songId);
 
-  /// 标记某歌降级到 mp3（flac 转码 ExoPlayer 解析失败后调用）：清除该歌
-  /// 的 flac 转码缓存，下次请求强制转码成 mp3。
+  /// 标记某歌降级到 MP3（OPUS/旧 FLAC 转码解析失败后调用）：清除该歌的
+  /// 转码缓存，下次请求强制转码成 MP3。
   void markDowngradeToMp3(String songId) {
     _downgradedToMp3.add(songId);
     _removeCacheFor(songId);

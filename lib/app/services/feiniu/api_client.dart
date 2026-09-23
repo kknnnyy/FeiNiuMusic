@@ -736,14 +736,14 @@ class FeiNiuApiClient {
 
   /// 请求服务器转码，返回 HLS 播放地址（`data.url`，通常为相对路径）。
   ///
-  /// 默认请求 FLAC（无损）；FLAC 帧超过解码器能力时由上层降级为
-  /// `codec: 'mp3'` 重新请求。转码失败 / 服务器未返回地址时返回 null。
+  /// 默认请求 OPUS；播放器无法解析时由上层降级为 `codec: 'mp3'`
+  /// 重新请求。转码失败 / 服务器未返回地址时返回 null。
   ///
   /// [bitrate] 只在非空且大于 0 时写入 output——**仅 flac 带 bitrate**（320），
   /// mp3/opus 不带（带 bitrate 会显著劣化音质）。
   Future<String?> trackTranscode(
     String guid, {
-    String codec = 'flac',
+    String codec = 'opus',
     int? bitrate,
     int channel = 2,
   }) async {

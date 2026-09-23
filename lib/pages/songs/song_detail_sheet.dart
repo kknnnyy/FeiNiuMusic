@@ -132,7 +132,7 @@ class _SongDetailSheetState extends State<SongDetailSheet> {
     await PlayerService.instance.setDecoderEngine(selected);
   }
 
-  /// 点击转码格式 tag：弹出「直连 / FLAC / MP3 / OPUS」四选一。选定后切换当前
+  /// 点击转码格式 tag：弹出「直连 / OPUS / MP3」三选一。选定后切换当前
   /// 歌曲的转码格式（直连=强制本曲不转码；格式=强制本曲按该格式转码，
   /// **不依赖全局「开启转码」开关**，直接请求转码地址）并关掉面板。
   Future<void> _showTranscodeFormatPicker(BuildContext context) async {
@@ -799,7 +799,6 @@ class _TranscodeFormatPickerSheet extends StatelessWidget {
     const labels = {
       TranscodeFormat.mp3: ('MP3', '高兼容，适合多数设备'),
       TranscodeFormat.opus: ('OPUS', '更省流量，文件更小'),
-      TranscodeFormat.flac: ('FLAC', '无损转码，流量较大'),
     };
     const color = Color(0xFFB08000);
     const directColor = Color(0xFF607D8B);
@@ -834,9 +833,9 @@ class _TranscodeFormatPickerSheet extends StatelessWidget {
     final isDirect = actualFormat == null;
     TranscodeFormat? selectedFormat;
     if (!isDirect) {
-      selectedFormat = TranscodeFormat.values.firstWhere(
+      selectedFormat = AppTranscodeSettings.availableFormats.firstWhere(
         (f) => f.name.toUpperCase() == actualFormat,
-        orElse: () => TranscodeFormat.flac,
+        orElse: () => TranscodeFormat.opus,
       );
     }
 
@@ -880,7 +879,7 @@ class _TranscodeFormatPickerSheet extends StatelessWidget {
               selected: isDirect,
               accent: directColor,
             ),
-            for (final fmt in TranscodeFormat.values)
+            for (final fmt in AppTranscodeSettings.availableFormats)
               tile(
                 fmt,
                 labels[fmt]!.$1,
