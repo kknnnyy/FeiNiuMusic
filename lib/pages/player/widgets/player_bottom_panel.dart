@@ -556,12 +556,7 @@ class BottomActions extends StatelessWidget {
   }
 
   void _showSleepTimerSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (_) => _SleepTimerSheet(player: player),
-    );
+    showPlayerSleepTimerSheet(context, player);
   }
 
   void _showPlaylistSheet(BuildContext context) {
@@ -616,6 +611,19 @@ void showPlayerPlaylistSheet(BuildContext context, PlayerService player) {
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
     builder: (_) => _PlaylistSheet(player: player),
+  );
+}
+
+/// 打开睡眠定时面板。
+///
+/// 海报模式歌词页等界面没有独立的定时按钮，统一从「更多」面板进入，
+/// 与底栏定时按钮共用同一个面板实现。
+void showPlayerSleepTimerSheet(BuildContext context, PlayerService player) {
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.transparent,
+    isScrollControlled: true,
+    builder: (_) => SleepTimerSheet(player: player),
   );
 }
 
@@ -708,16 +716,17 @@ class _PlayerSheetView extends StatelessWidget {
   }
 }
 
-class _SleepTimerSheet extends StatefulWidget {
+/// 睡眠定时面板：设定时长或「播完整首歌后关闭」，可取消当前定时。
+class SleepTimerSheet extends StatefulWidget {
   final PlayerService player;
 
-  const _SleepTimerSheet({required this.player});
+  const SleepTimerSheet({super.key, required this.player});
 
   @override
-  State<_SleepTimerSheet> createState() => _SleepTimerSheetState();
+  State<SleepTimerSheet> createState() => SleepTimerSheetState();
 }
 
-class _SleepTimerSheetState extends State<_SleepTimerSheet> with SignalsMixin {
+class SleepTimerSheetState extends State<SleepTimerSheet> with SignalsMixin {
   late final _minutes = createSignal(30.0);
 
   @override

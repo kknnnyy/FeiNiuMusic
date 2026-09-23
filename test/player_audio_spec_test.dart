@@ -108,8 +108,14 @@ void main() {
       Size(style == PlayerStylePreset.poster ? 360 : 320, 568),
       const Size(1280, 800),
     ]) {
+      // 海报竖屏走 _PosterPlayerLayout，规格夹在收藏/队列按钮之间；
+      // 横屏（含海报）走横屏布局底栏，规格仍在进度条下方。
+      final inlineSpec =
+          style == PlayerStylePreset.poster && size.width <= size.height;
       testWidgets(
-        '$style $size: audio specification appears below progress bar',
+        inlineSpec
+            ? '$style $size: 规格位于进度条上方且夹在收藏与队列按钮之间'
+            : '$style $size: audio specification appears below progress bar',
         (tester) async {
           SharedPreferences.setMockInitialValues({});
           AppLayoutSettings.resetForTest();
@@ -130,10 +136,31 @@ void main() {
           await tester.pump();
           await tester.pump(const Duration(milliseconds: 400));
           expect(find.text(_label), findsOneWidget);
-          expect(
-            tester.getTopLeft(find.text(_label)).dy,
-            greaterThan(tester.getBottomLeft(find.byType(Slider).first).dy),
-          );
+          final specRect = tester.getRect(find.text(_label));
+          final sliderRect = tester.getRect(find.byType(Slider).first);
+          if (inlineSpec) {
+            // 海报模式：规格移到进度条上方，并在收藏与队列按钮之间居中。
+            expect(
+              specRect.bottom,
+              lessThan(sliderRect.top),
+              reason: '海报模式规格应位于进度条上方，实际 bottom=${specRect.bottom}',
+            );
+            final favoriteRect = tester.getRect(
+              find.byKey(const ValueKey('player-favorite-button')),
+            );
+            final queueRect = tester.getRect(
+              find.widgetWithIcon(IconButton, Icons.menu_rounded),
+            );
+            expect(specRect.center.dx, greaterThan(favoriteRect.right));
+            expect(specRect.center.dx, lessThan(queueRect.left));
+            expect(
+              specRect.center.dx,
+              closeTo((favoriteRect.right + queueRect.left) / 2, 2),
+              reason: '规格应在收藏与队列按钮之间居中，实际 ${specRect.center.dx}',
+            );
+          } else {
+            expect(specRect.top, greaterThan(sliderRect.bottom));
+          }
           expect(tester.takeException(), isNull);
           await tester.pumpWidget(const MaterialApp(home: SizedBox()));
           await tester.pump();

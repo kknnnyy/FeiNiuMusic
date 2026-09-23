@@ -16,6 +16,7 @@ import '../../components/common/app_list_tile.dart';
 import '../../components/feedback/app_toast.dart';
 import '../library/library_detail_pages.dart';
 import '../library/playlists_page.dart';
+import '../player/widgets/player_bottom_panel.dart';
 import 'song_edit_page.dart';
 
 class SongDetailSheet extends StatefulWidget {
@@ -247,6 +248,7 @@ class _SongDetailSheetState extends State<SongDetailSheet> {
             if (widget.showPlayerControls) ...[
               const _AppVolumeControl(),
               const _PlaybackSpeedControl(),
+              const _SleepTimerActionTile(),
             ],
             AppListTile(
               leading: const Icon(Icons.queue_play_next),
@@ -605,6 +607,35 @@ class _PlaybackSpeedControl extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// 睡眠定时入口：海报模式歌词页等界面没有独立定时按钮，统一从「更多」
+/// 面板进入，与底栏定时按钮共用同一个面板。
+class _SleepTimerActionTile extends StatelessWidget {
+  const _SleepTimerActionTile();
+
+  @override
+  Widget build(BuildContext context) {
+    final player = PlayerService.instance;
+    return ValueListenableBuilder<String?>(
+      valueListenable: player.sleepTimerDisplayText,
+      builder: (context, remaining, _) {
+        final isActive = remaining != null && remaining.isNotEmpty;
+        return AppListTile(
+          leading: const Icon(Icons.bedtime_outlined),
+          title: '定时关闭',
+          subtitle: isActive ? '剩余 $remaining，点击修改或取消' : '到达设定时间后自动停止播放',
+          trailing: const Icon(Icons.chevron_right_rounded),
+          onTap: () {
+            // 先关掉「更多」面板再打开定时面板，避免两层底部面板叠在一起。
+            final navigator = Navigator.of(context);
+            navigator.pop();
+            showPlayerSleepTimerSheet(navigator.context, player);
+          },
+        );
+      },
     );
   }
 }

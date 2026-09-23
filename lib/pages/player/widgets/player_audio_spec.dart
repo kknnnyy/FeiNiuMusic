@@ -9,10 +9,15 @@ class PlayerAudioSpec extends StatelessWidget {
   final ValueListenable<SongEntity?> songListenable;
   final ValueListenable<String?>? playbackCodecListenable;
 
+  /// 外层留白。默认值按整行铺开的样式设计；夹在其他控件中间时传更小的
+  /// 横向留白（例如 [EdgeInsets.zero]），让文字在可用空间里居中。
+  final EdgeInsetsGeometry padding;
+
   const PlayerAudioSpec({
     super.key,
     required this.songListenable,
     this.playbackCodecListenable,
+    this.padding = const EdgeInsets.fromLTRB(20, 4, 20, 0),
   });
 
   @override
@@ -29,7 +34,7 @@ class PlayerAudioSpec extends StatelessWidget {
         );
         if (text.isEmpty) return const SizedBox.shrink();
         return Padding(
-          padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+          padding: padding,
           child: Tooltip(
             message: '实际播放音频信息',
             child: Text(

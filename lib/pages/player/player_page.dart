@@ -722,8 +722,9 @@ class _PosterPlayerLayout extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    // 收藏 / 队列按钮（与 1.4.1 一致，位于进度条上方）。
-                    // 两端与轨道内缩（_posterTrackInset）对齐，不超出轨道。
+                    // 收藏 / 音频规格 / 队列按钮（与 1.4.1 一致，位于进度条上方）。
+                    // 规格文字夹在收藏与队列之间居中；两端与轨道内缩
+                    // （_posterTrackInset）对齐，不超出轨道。
                     Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: _posterTrackInset,
@@ -732,7 +733,6 @@ class _PosterPlayerLayout extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     _PosterSeekBar(player: player),
-                    PlayerAudioSpec(songListenable: player.currentSong),
                     const SizedBox(height: 20),
                     // 播放控制：行宽与轨道对齐（两端内缩 _posterTrackInset）。
                     Padding(
@@ -989,6 +989,7 @@ class _PosterLyricLine extends StatelessWidget {
   }
 }
 
+/// 海报模式进度条上方的按钮行：收藏在左、队列在右，音频规格居中。
 class _PosterMetaRow extends StatelessWidget {
   final PlayerService player;
   final SongEntity? song;
@@ -1001,7 +1002,12 @@ class _PosterMetaRow extends StatelessWidget {
     return Row(
       children: [
         PlayerFavoriteButton(song: song),
-        const Spacer(),
+        Expanded(
+          child: PlayerAudioSpec(
+            songListenable: player.currentSong,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+          ),
+        ),
         IconButton(
           visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
           padding: EdgeInsets.zero,
