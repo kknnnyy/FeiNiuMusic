@@ -84,6 +84,7 @@ class LyricPreview extends StatelessWidget {
         lyrics.viewInactiveColor,
         lyrics.viewActiveColor,
         lyrics.viewHighlightColor,
+        lyrics.viewFontFamily,
       ]),
       builder: (context, _) {
         final theme = Theme.of(context);
@@ -106,15 +107,21 @@ class LyricPreview extends StatelessWidget {
           context,
           inactiveColor: inactiveColor,
         );
+        final configuredFontFamily = lyrics.viewFontFamily.value.trim();
+        final fontFamily = configuredFontFamily.isEmpty
+            ? null
+            : configuredFontFamily;
 
         // 与歌词详情页保持同一份 LyricStyle 构造，但锁定为只读预览。
         final style = LyricStyle(
           textStyle: TextStyle(
+            fontFamily: fontFamily,
             color: inactiveColor,
             fontSize: fontSize,
             height: 1.3,
           ),
           activeStyle: TextStyle(
+            fontFamily: fontFamily,
             color: karaokeBaseColor,
             fontSize: activeFontSize,
             fontWeight: FontWeight.w700,
@@ -122,6 +129,7 @@ class LyricPreview extends StatelessWidget {
           ),
           translationStyle: showTranslation
               ? TextStyle(
+                  fontFamily: fontFamily,
                   color: isLight
                       ? const Color(0xFF7A7A7A)
                       : onSurface.withValues(alpha: 0.35),
@@ -169,10 +177,7 @@ class LyricPreview extends StatelessWidget {
         final preview = ClipRect(
           child: SizedBox(
             height: height,
-            child: LyricView(
-              controller: lyrics.controller,
-              style: style,
-            ),
+            child: LyricView(controller: lyrics.controller, style: style),
           ),
         );
         if (!fadeEdges) {

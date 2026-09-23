@@ -1,26 +1,28 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_lyric/core/lyric_model.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 import 'package:signals_flutter/signals_flutter.dart' hide computed;
 
 import '../../app/router/app_router.dart';
-import '../../app/services/feiniu/favorite_service.dart';
 import '../../app/services/lyrics/lyrics_service.dart';
 import '../../app/services/player_service.dart';
 import '../../app/state/settings_state.dart';
 import '../../app/state/song_state.dart';
 import '../../app/utils/route_visibility.dart';
 import '../../components/common/artwork_widget.dart';
-import '../../components/feedback/app_toast.dart';
 import '../../components/player/lyric_preview.dart';
 import 'lyrics/lyric_view.dart';
 import 'widgets/cast_button.dart';
+import 'widgets/player_audio_spec.dart';
 import 'widgets/player_background.dart';
 import 'widgets/player_bottom_panel.dart';
 import 'widgets/player_header.dart';
+import 'widgets/player_favorite_button.dart';
 import 'tv_player_focus_scope.dart';
 
 class PlayerPage extends StatefulWidget {
@@ -46,6 +48,7 @@ class _PlayerPageState extends State<PlayerPage>
   @override
   void initState() {
     super.initState();
+    _applyPlayerOrientations();
     // 播放页路由激活标记：TV 模式据此隐藏侧栏与迷你播放器。
     // 延迟到首帧后设置：initState 在 build 阶段执行，此时直接改
     // playerRouteActive 会通知祖先的 ValueListenableBuilder 触发
@@ -132,8 +135,29 @@ class _PlayerPageState extends State<PlayerPage>
     navigator.pushReplacementNamed(AppRoutes.home);
   }
 
+  void _applyPlayerOrientations() {
+    if (!Platform.isAndroid && !Platform.isIOS) return;
+    SystemChrome.setPreferredOrientations(
+      AppLayoutSettings.orientationsForPlayer(
+        isTv: AppLayoutSettings.tvMode.value,
+      ),
+    );
+  }
+
+  void _restoreAppOrientations() {
+    if (!Platform.isAndroid && !Platform.isIOS) return;
+    SystemChrome.setPreferredOrientations(
+      AppLayoutSettings.orientationsForDevice(
+        isTv: AppLayoutSettings.tvMode.value,
+        shortestSide: AppLayoutSettings.currentShortestSide(),
+        manualTabletMode: AppLayoutSettings.tabletMode.value,
+      ),
+    );
+  }
+
   @override
   void dispose() {
+    _restoreAppOrientations();
     _dismissController.dispose();
     _pageController.dispose();
     _dismissOffset.dispose();
@@ -187,23 +211,20 @@ class _PlayerPageState extends State<PlayerPage>
                   valueListenable: PlayerStyleSettings.stylePreset,
                   builder: (context, stylePreset, _) {
                     final isPoster = stylePreset == PlayerStylePreset.poster;
-                    // 平板横屏：桌面式布局（左侧封面+控制、右侧歌词块），
-                    // 自带顶部 header，外层全宽 header 隐藏，避免重复占位
-                    // 把右侧歌词块推到下方留出大片空白。
                     final mq = MediaQuery.of(context);
-                    final isTabletLandscape =
-                        AppLayoutSettings.effectiveTabletMode &&
-                        (AppLayoutSettings.tvMode.value ||
-                            mq.orientation == Orientation.landscape) &&
-                        mq.size.width >= 900;
+                    final isLandscapePlayer =
+                        AppLayoutSettings.tvMode.value ||
+                        mq.orientation == Orientation.landscape;
                     // Poster 关闭顶部/底部 SafeArea 让封面延伸到屏幕边缘
                     // （覆盖状态栏/导航栏），歌词页再手动补回 inset 避免文字
                     // 滑入系统栏下方。
                     final topInset = MediaQuery.paddingOf(context).top;
                     final bottomInset = MediaQuery.paddingOf(context).bottom;
                     return SafeArea(
-                      top: !isPoster && !isTabletLandscape,
-                      bottom: !isPoster,
+                      // 横屏采用左右分栏，封面不再贴边覆盖系统栏；竖屏海报
+                      // 继续保留原有的沉浸式封面行为。
+                      top: isLandscapePlayer || !isPoster,
+                      bottom: isLandscapePlayer || !isPoster,
                       child: Column(
                         children: [
                           GestureDetector(
@@ -212,7 +233,7 @@ class _PlayerPageState extends State<PlayerPage>
                             onVerticalDragUpdate: _handleDismissDragUpdate,
                             onVerticalDragEnd: _handleDismissDragEnd,
                             onVerticalDragCancel: _handleDismissDragCancel,
-                            child: isPoster || isTabletLandscape
+                            child: isPoster || isLandscapePlayer
                                 ? const SizedBox.shrink()
                                 : PlayerHeader(
                                     songSignal: _player.currentSongSignal,
@@ -220,50 +241,56 @@ class _PlayerPageState extends State<PlayerPage>
                                   ),
                           ),
                           Expanded(
-                            child: PageView(
-                              controller: _pageController,
-                              onPageChanged: (page) {
-                                // 离开歌词页（切回封面页）时释放全局拖动选中状态：
-                                // LyricController 是全局单例，歌词页拖动选中后若直接
-                                // 横滑回封面页，残留状态会传染给共享 controller 的
-                                // 歌词预览（底栏迷你歌词/海报预览）。
-                                if (page != 1) {
-                                  LyricsService.instance.controller
-                                      .stopSelection();
-                                }
-                              },
-                              children: [
-                                _PlayerView(
-                                  player: _player,
-                                  bottomPanelFocus: _bottomPanelFocus,
-                                  onTapLyrics: () =>
-                                      _pageController.animateToPage(
-                                        1,
-                                        duration: const Duration(
-                                          milliseconds: 280,
-                                        ),
-                                        curve: Curves.easeOut,
+                            child: isLandscapePlayer
+                                ? _LandscapePlayerLayout(
+                                    player: _player,
+                                    stylePreset: stylePreset,
+                                    bottomPanelFocus: _bottomPanelFocus,
+                                  )
+                                : PageView(
+                                    controller: _pageController,
+                                    onPageChanged: (page) {
+                                      // 离开歌词页（切回封面页）时释放全局拖动选中状态：
+                                      // LyricController 是全局单例，歌词页拖动选中后若直接
+                                      // 横滑回封面页，残留状态会传染给共享 controller 的
+                                      // 歌词预览（底栏迷你歌词/海报预览）。
+                                      if (page != 1) {
+                                        LyricsService.instance.controller
+                                            .stopSelection();
+                                      }
+                                    },
+                                    children: [
+                                      _PlayerView(
+                                        player: _player,
+                                        bottomPanelFocus: _bottomPanelFocus,
+                                        onTapLyrics: () =>
+                                            _pageController.animateToPage(
+                                              1,
+                                              duration: const Duration(
+                                                milliseconds: 280,
+                                              ),
+                                              curve: Curves.easeOut,
+                                            ),
                                       ),
-                                ),
-                                isPoster
-                                    ? Padding(
-                                        // SafeArea 已关闭，歌词页手动补回顶部/底部 inset，
-                                        // 防止歌词行滑入状态栏或系统导航栏下方。
-                                        padding: EdgeInsets.only(
-                                          top: topInset,
-                                          bottom: bottomInset,
-                                        ),
-                                        child: const PlayerLyricsView(
-                                          showControls: true,
-                                          fadeEdges: true,
-                                        ),
-                                      )
-                                    : const PlayerLyricsView(
-                                        showControls: true,
-                                        fadeEdges: true,
-                                      ),
-                              ],
-                            ),
+                                      isPoster
+                                          ? Padding(
+                                              // SafeArea 已关闭，歌词页手动补回顶部/底部 inset，
+                                              // 防止歌词行滑入状态栏或系统导航栏下方。
+                                              padding: EdgeInsets.only(
+                                                top: topInset,
+                                                bottom: bottomInset,
+                                              ),
+                                              child: const PlayerLyricsView(
+                                                showControls: true,
+                                                fadeEdges: true,
+                                              ),
+                                            )
+                                          : const PlayerLyricsView(
+                                              showControls: true,
+                                              fadeEdges: true,
+                                            ),
+                                    ],
+                                  ),
                           ),
                         ],
                       ),
@@ -307,9 +334,8 @@ class _PlayerPageState extends State<PlayerPage>
                         icon: Icon(
                           Icons.arrow_back_rounded,
                           size: 24,
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onSurface.withValues(alpha: 0.72),
+                          color: Theme.of(context).colorScheme.onSurface
+                              .withValues(alpha: 0.72),
                         ),
                         onPressed: _closePlayer,
                       ),
@@ -350,37 +376,14 @@ class _PlayerView extends StatelessWidget {
     return ValueListenableBuilder<PlayerStylePreset>(
       valueListenable: PlayerStyleSettings.stylePreset,
       builder: (context, stylePreset, _) {
-        return ValueListenableBuilder<bool>(
-          valueListenable: AppLayoutSettings.effectiveTabletModeNotifier,
-          builder: (context, effectiveTabletMode, _) {
-            final mq = MediaQuery.of(context);
-            // TV 恒横屏，无需 orientation 门；普通平板仍需横屏 + 宽度门槛。
-            final isTabletLandscape =
-                effectiveTabletMode &&
-                (AppLayoutSettings.tvMode.value ||
-                    mq.orientation == Orientation.landscape) &&
-                mq.size.width >= 900;
-            if (!isTabletLandscape) {
-              if (stylePreset == PlayerStylePreset.poster) {
-                return _PosterPlayerLayout(
-                  player: player,
-                  onTapLyrics: onTapLyrics,
-                );
-              }
-              return _MobilePlayerLayout(
-                player: player,
-                stylePreset: stylePreset,
-                onTapLyrics: onTapLyrics,
-                bottomPanelFocus: bottomPanelFocus,
-              );
-            }
-            return _TabletLandscapePlayerLayout(
-              player: player,
-              stylePreset: stylePreset,
-              onTapLyrics: onTapLyrics,
-              bottomPanelFocus: bottomPanelFocus,
-            );
-          },
+        if (stylePreset == PlayerStylePreset.poster) {
+          return _PosterPlayerLayout(player: player, onTapLyrics: onTapLyrics);
+        }
+        return _MobilePlayerLayout(
+          player: player,
+          stylePreset: stylePreset,
+          onTapLyrics: onTapLyrics,
+          bottomPanelFocus: bottomPanelFocus,
         );
       },
     );
@@ -425,75 +428,202 @@ class _MobilePlayerLayout extends StatelessWidget {
   }
 }
 
-class _TabletLandscapePlayerLayout extends StatelessWidget {
+/// 横屏播放页布局。
+///
+/// 高屏（平板/桌面横屏）沿用「封面 + 标题 + 控制区」纵向排布，全部常驻可见；
+/// 矮屏（手机横屏，可用高度不到 500）隐藏左栏标题，让封面相对整列居中，
+/// 控制区做底部浮层；否则标题和控制区会把自转封面挤小并推向下方。
+class _LandscapePlayerLayout extends StatefulWidget {
   final PlayerService player;
   final PlayerStylePreset stylePreset;
-  final VoidCallback onTapLyrics;
   final FocusNode? bottomPanelFocus;
 
-  const _TabletLandscapePlayerLayout({
+  const _LandscapePlayerLayout({
     required this.player,
     required this.stylePreset,
-    required this.onTapLyrics,
     this.bottomPanelFocus,
   });
 
   @override
+  State<_LandscapePlayerLayout> createState() => _LandscapePlayerLayoutState();
+}
+
+class _LandscapePlayerLayoutState extends State<_LandscapePlayerLayout> {
+  /// 矮屏阈值：手机横屏（844×390 等）可用高度不到 400，平板/桌面横屏通常 ≥ 600。
+  static const double shortHeightThreshold = 500;
+
+  /// 播放中控制浮层静置多久后自动隐藏。
+  static const Duration autoHideDelay = Duration(seconds: 4);
+
+  /// 矮屏下控制浮层是否显示：点击封面区域切换，播放中静置后自动隐藏。
+  bool _controlsVisible = true;
+  Timer? _hideTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    // 播放状态变化时重新计时：开始播放 → 起计时；暂停 → 取消，浮层常驻。
+    widget.player.isPlaying.addListener(_scheduleAutoHide);
+    _scheduleAutoHide();
+  }
+
+  @override
+  void dispose() {
+    widget.player.isPlaying.removeListener(_scheduleAutoHide);
+    _hideTimer?.cancel();
+    super.dispose();
+  }
+
+  void _scheduleAutoHide() {
+    _hideTimer?.cancel();
+    // 暂停/缓冲时保持常驻，否则想继续播放还得先点一下屏幕。
+    if (!widget.player.isPlaying.value) return;
+    _hideTimer = Timer(autoHideDelay, () {
+      if (!mounted) return;
+      setState(() => _controlsVisible = false);
+    });
+  }
+
+  void _toggleControls() {
+    setState(() => _controlsVisible = !_controlsVisible);
+    if (_controlsVisible) {
+      _scheduleAutoHide();
+    } else {
+      _hideTimer?.cancel();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final compact = size.width < 900;
+    final horizontalPadding = compact ? 12.0 : 24.0;
+    final gap = compact ? 12.0 : 24.0;
     const lyricRadius = 24.0;
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 8, 24, 12),
+      key: const ValueKey('landscape-player-layout'),
+      padding: EdgeInsets.fromLTRB(horizontalPadding, 8, horizontalPadding, 8),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(
             flex: 5,
-            child: Column(
-              children: [
-                const Spacer(),
-                Expanded(
-                  flex: 8,
-                  child: Center(
-                    child: _PlayerArtwork(
-                      songSignal: player.currentSongSignal,
-                      stylePreset: stylePreset,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                PlayerHeader(
-                  songSignal: player.currentSongSignal,
-                  stylePreset: stylePreset,
-                ),
-                const SizedBox(height: 8),
-                // Playback controls were missing entirely in tablet landscape.
-                // Reuse the panel (without its mini-lyrics, since full lyrics
-                // already show on the right).
-                PlayerBottomPanel(
-                  player: player,
-                  stylePreset: stylePreset,
-                  onTapLyrics: onTapLyrics,
-                  showMiniLyrics: false,
-                  bottomPanelFocus: bottomPanelFocus,
-                ),
-                const Spacer(),
-              ],
-            ),
+            child: size.height < shortHeightThreshold
+                ? _buildOverlayColumn(context, compact: compact)
+                : _buildStackedColumn(compact: compact),
           ),
-          const SizedBox(width: 24),
+          SizedBox(width: gap),
           Expanded(
             flex: 6,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(lyricRadius),
               child: Container(
-                color: Theme.of(
-                  context,
-                ).colorScheme.surface.withValues(alpha: 0.16),
-                child: const PlayerLyricsView(),
+                color: Theme.of(context).colorScheme.surface
+                    .withValues(alpha: 0.16),
+                child: const PlayerLyricsView(fadeEdges: true),
               ),
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _artwork() {
+    return _PlayerArtwork(
+      key: const ValueKey('landscape-player-artwork'),
+      songSignal: widget.player.currentSongSignal,
+      stylePreset: widget.stylePreset,
+    );
+  }
+
+  Widget _bottomPanel({required bool compact}) {
+    return PlayerBottomPanel(
+      player: widget.player,
+      stylePreset: widget.stylePreset,
+      // 横屏右侧已经显示完整歌词，不再在左栏重复显示迷你歌词预览。
+      onTapLyrics: () {},
+      showMiniLyrics: false,
+      compact: compact,
+      bottomPanelFocus: widget.bottomPanelFocus,
+    );
+  }
+
+  /// 高屏：纵向排布。控制区按内容高度优先布局（上限 62% 高度，超出时内部
+  /// 滚动兜底），封面只吃剩余空间并按可用高度收缩。
+  Widget _buildStackedColumn({required bool compact}) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final panelMaxHeight = (constraints.maxHeight * 0.62).clamp(
+          120.0,
+          constraints.maxHeight,
+        );
+        return Column(
+          children: [
+            Expanded(child: Center(child: _artwork())),
+            SizedBox(height: compact ? 4 : 12),
+            PlayerHeader(
+              songSignal: widget.player.currentSongSignal,
+              stylePreset: widget.stylePreset,
+            ),
+            ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: panelMaxHeight),
+              child: SingleChildScrollView(
+                child: _bottomPanel(compact: compact),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// 矮屏（手机横屏）：隐藏标题，封面相对整列居中；控制区浮在底部，
+  /// 点击封面区域显隐。歌曲标题在右侧歌词区已有上下文，不在狭窄左栏重复。
+  Widget _buildOverlayColumn(BuildContext context, {required bool compact}) {
+    return Stack(
+      key: const ValueKey('short-landscape-artwork-area'),
+      children: [
+        Positioned.fill(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _toggleControls,
+            child: Center(child: _artwork()),
+          ),
+        ),
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: IgnorePointer(
+            ignoring: !_controlsVisible,
+            child: AnimatedOpacity(
+              opacity: _controlsVisible ? 1 : 0,
+              duration: const Duration(milliseconds: 180),
+              child: Listener(
+                // 操作浮层时重新计时，避免拖进度条拖到一半浮层消失。
+                onPointerDown: (_) => _scheduleAutoHide(),
+                onPointerUp: (_) => _scheduleAutoHide(),
+                child: DecoratedBox(
+                  // 控制浮层压在封面/背景上，补一层渐变遮罩保证按钮可读。
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.transparent,
+                        Colors.black.withValues(alpha: 0.55),
+                      ],
+                    ),
+                  ),
+                  child: _bottomPanel(compact: compact),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -508,10 +638,7 @@ class _PosterPlayerLayout extends StatelessWidget {
   final PlayerService player;
   final VoidCallback onTapLyrics;
 
-  const _PosterPlayerLayout({
-    required this.player,
-    required this.onTapLyrics,
-  });
+  const _PosterPlayerLayout({required this.player, required this.onTapLyrics});
 
   @override
   Widget build(BuildContext context) {
@@ -544,12 +671,7 @@ class _PosterPlayerLayout extends StatelessWidget {
             Expanded(
               child: Container(
                 width: double.infinity,
-                padding: EdgeInsets.fromLTRB(
-                  24,
-                  headerPad,
-                  24,
-                  bottomPad,
-                ),
+                padding: EdgeInsets.fromLTRB(24, headerPad, 24, bottomPad),
                 // Transparent so the cover-color + 流光 background shows through,
                 // matching the lyrics page (no solid white panel).
                 child: Column(
@@ -610,16 +732,14 @@ class _PosterPlayerLayout extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     _PosterSeekBar(player: player),
+                    PlayerAudioSpec(songListenable: player.currentSong),
                     const SizedBox(height: 20),
                     // 播放控制：行宽与轨道对齐（两端内缩 _posterTrackInset）。
                     Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: _posterTrackInset,
                       ),
-                      child: PosterControls(
-                        player: player,
-                        alignToTrack: true,
-                      ),
+                      child: PosterControls(player: player, alignToTrack: true),
                     ),
                     // 底部留白：让控制栏整体抬离屏幕底部
                     SizedBox(height: bottomInset > 20 ? 16 : 28),
@@ -673,10 +793,7 @@ class _PosterArtwork extends StatelessWidget {
                 height: frostHeight,
                 child: ClipRect(
                   child: ImageFiltered(
-                    imageFilter: ui.ImageFilter.blur(
-                      sigmaX: 18,
-                      sigmaY: 18,
-                    ),
+                    imageFilter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
                     child: _buildCover(context),
                   ),
                 ),
@@ -697,13 +814,7 @@ class _PosterArtwork extends StatelessWidget {
                     Color(0x00FFFFFF),
                     Color(0x00FFFFFF),
                   ],
-                  stops: [
-                    0.0,
-                    frostHeight / heroHeight,
-                    0.62,
-                    0.95,
-                    1.0,
-                  ],
+                  stops: [0.0, frostHeight / heroHeight, 0.62, 0.95, 1.0],
                 ).createShader(rect),
                 child: _buildCover(context),
               ),
@@ -750,7 +861,9 @@ class _PosterArtwork extends StatelessWidget {
         // boxSize 为 0 或 NaN，连锁导致 ShaderMask/RotationTransition
         // 产生 Matrix4 非有限值 / RRect NaN 崩溃。
         final maxW = constraints.maxWidth.isFinite ? constraints.maxWidth : 0.0;
-        final maxH = constraints.maxHeight.isFinite ? constraints.maxHeight : 0.0;
+        final maxH = constraints.maxHeight.isFinite
+            ? constraints.maxHeight
+            : 0.0;
         final boxSize = (maxW > maxH ? maxW : maxH).clamp(1.0, 2000.0);
         final child = song == null
             ? Skeletonizer(
@@ -887,7 +1000,7 @@ class _PosterMetaRow extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return Row(
       children: [
-        _PosterFavoriteButton(song: song),
+        PlayerFavoriteButton(song: song),
         const Spacer(),
         IconButton(
           visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
@@ -901,103 +1014,6 @@ class _PosterMetaRow extends StatelessWidget {
           onPressed: () => showPlayerPlaylistSheet(context, player),
         ),
       ],
-    );
-  }
-}
-
-class _PosterFavoriteButton extends StatefulWidget {
-  final SongEntity? song;
-
-  const _PosterFavoriteButton({required this.song});
-
-  @override
-  State<_PosterFavoriteButton> createState() => _PosterFavoriteButtonState();
-}
-
-class _PosterFavoriteButtonState extends State<_PosterFavoriteButton> {
-  final FeiNiuFavoriteService _favoriteService = FeiNiuFavoriteService.instance;
-  bool _isFavorite = false;
-  bool _loading = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadFavoriteState();
-  }
-
-  @override
-  void didUpdateWidget(covariant _PosterFavoriteButton oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.song?.id != widget.song?.id) {
-      _loadFavoriteState();
-    }
-  }
-
-  Future<void> _loadFavoriteState() async {
-    final song = widget.song;
-    if (song == null) {
-      if (mounted) {
-        setState(() {
-          _isFavorite = false;
-          _loading = false;
-        });
-      }
-      return;
-    }
-    setState(() => _loading = true);
-    try {
-      final favIds = await _favoriteService.getFavoriteIds();
-      if (!mounted || widget.song?.id != song.id) return;
-      setState(() {
-        _isFavorite = favIds.contains(song.id);
-        _loading = false;
-      });
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _toggleFavorite() async {
-    final song = widget.song;
-    if (_loading || song == null) return;
-    setState(() => _loading = true);
-    try {
-      if (_isFavorite) {
-        await _favoriteService.unfavorite(song.id);
-        if (!mounted) return;
-        setState(() {
-          _isFavorite = false;
-          _loading = false;
-        });
-        AppToast.show(context, '已取消收藏');
-      } else {
-        await _favoriteService.favorite(song.id);
-        if (!mounted) return;
-        setState(() {
-          _isFavorite = true;
-          _loading = false;
-        });
-        AppToast.show(context, '已收藏');
-      }
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return IconButton(
-      visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
-      padding: EdgeInsets.zero,
-      constraints: const BoxConstraints.tightFor(width: 34, height: 34),
-      icon: Icon(
-        _isFavorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-        color: _isFavorite
-            ? Colors.deepOrangeAccent
-            : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.72),
-        size: 24,
-      ),
-      onPressed: widget.song == null || _loading ? null : _toggleFavorite,
     );
   }
 }
@@ -1113,7 +1129,9 @@ class _PosterSeekBarState extends State<_PosterSeekBar> with SignalsMixin {
             // 时间标签：位于进度条下方，两端与轨道内缩（_posterTrackInset）对齐，
             // 不超出进度条两端的实际长度。
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: _posterTrackInset),
+              padding: const EdgeInsets.symmetric(
+                horizontal: _posterTrackInset,
+              ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -1147,7 +1165,11 @@ class _PlayerArtwork extends StatelessWidget {
   final Signal<SongEntity?> songSignal;
   final PlayerStylePreset stylePreset;
 
-  const _PlayerArtwork({required this.songSignal, required this.stylePreset});
+  const _PlayerArtwork({
+    super.key,
+    required this.songSignal,
+    required this.stylePreset,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1155,8 +1177,7 @@ class _PlayerArtwork extends StatelessWidget {
       valueListenable: AppLayoutSettings.effectiveTabletModeNotifier,
       builder: (context, effectiveTabletMode, _) {
         final isTabletLayout =
-            effectiveTabletMode &&
-            MediaQuery.sizeOf(context).width >= 720;
+            effectiveTabletMode && MediaQuery.sizeOf(context).width >= 720;
         final isTv = AppLayoutSettings.tvMode.value;
         return Watch.builder(
           builder: (context) {
@@ -1178,8 +1199,9 @@ class _PlayerArtwork extends StatelessWidget {
                     // 塌缩成 0，导致封面贴顶、居中失效、底栏消失）。
                     final width = constraints.maxWidth;
                     final boxSize = width < maxSize ? width : maxSize;
-                    final size =
-                        boxSize < constraints.maxHeight ? boxSize : constraints.maxHeight;
+                    final size = boxSize < constraints.maxHeight
+                        ? boxSize
+                        : constraints.maxHeight;
                     return Center(
                       child: SizedBox(
                         width: size,
@@ -1200,10 +1222,12 @@ class _PlayerArtwork extends StatelessWidget {
                 builder: (context, constraints) {
                   final width = constraints.maxWidth;
                   final boxSize = width < maxSize ? width : maxSize;
-                  final size =
-                      boxSize < constraints.maxHeight ? boxSize : constraints.maxHeight;
-                  final borderRadius =
-                      PlayerBackgroundSettings.roundCover.value ? size / 2 : 12.0;
+                  final size = boxSize < constraints.maxHeight
+                      ? boxSize
+                      : constraints.maxHeight;
+                  final borderRadius = PlayerBackgroundSettings.roundCover.value
+                      ? size / 2
+                      : 12.0;
                   return Center(
                     child: SizedBox(
                       width: size,

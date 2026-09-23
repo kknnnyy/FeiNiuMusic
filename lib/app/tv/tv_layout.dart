@@ -1,11 +1,22 @@
 import 'package:flutter/widgets.dart';
 
+import '../state/settings_layout_state.dart';
+
 /// TV 端布局辅助（10-foot UI）。
 ///
-/// 所有值都是纯函数，调用方在 `tvEnabled` 为真时使用；手机端不使用这些值，
-/// 因此不影响现有布局。
+/// TV 布局尺寸由调用方仅在 TV 模式下使用，手机端不使用这些值。
 class TvLayout {
   TvLayout._();
+
+  /// 高逻辑分辨率屏幕上的车机界面按屏幕短边适度放大。
+  /// 以 720dp 为基准，限制上限避免 4K 屏幕上的控件过大。
+  static double recommendedUiScale(BuildContext context) {
+    final shortestSide = MediaQuery.sizeOf(context).shortestSide;
+    return (shortestSide / 720).clamp(1.0, 1.3);
+  }
+
+  static double uiScale(BuildContext context) =>
+      AppLayoutSettings.tvUiScaleOverride.value ?? recommendedUiScale(context);
 
   /// TV 网格列数：按逻辑宽度分级，1080p 盒子（约 1920 逻辑宽）取 5-6 列。
   static int gridColumns(double width) {
@@ -29,8 +40,7 @@ class TvLayout {
 
   /// 页面水平/垂直留白：TV 从 3 米外观看，间距比手机大，底部无需
   /// 160px 手势条留白（TV 没有全面屏手势条）。
-  static EdgeInsets pagePadding() =>
-      const EdgeInsets.fromLTRB(32, 12, 32, 32);
+  static EdgeInsets pagePadding() => const EdgeInsets.fromLTRB(32, 12, 32, 32);
 
   /// 列表行封面/缩略图尺寸。
   static double artworkSize() => 56;

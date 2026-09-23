@@ -72,6 +72,7 @@ class FeiNiuRoamService {
       uri: _api.streamUrl(track.guid),
       headersJson: jsonEncode(FeiNiuApiClient.instance.authHeaders()),
       durationMs: track.duration,
+      bitrate: track.audioSpec?.bitrate,
       format: track.audioSpec?.format,
       codec: track.audioSpec?.codec,
       fileSize: track.audioSpec?.size,

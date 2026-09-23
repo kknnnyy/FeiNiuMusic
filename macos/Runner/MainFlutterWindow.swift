@@ -1,8 +1,14 @@
 import Cocoa
 import FlutterMacOS
+import desktop_multi_window
+
+/// 子窗口的 FlutterMethodChannel 必须被强引用，释放后 handler 会被移除，
+/// Dart 侧 invokeMethod 将永远等不到回包。
+private var childWindowChannels: [FlutterMethodChannel] = []
 
 class MainFlutterWindow: NSWindow, NSWindowDelegate {
   private var statusBarController: MacosStatusBarController?
+  private var systemFontsChannel: FlutterMethodChannel?
 
   /// 关闭按钮是否隐藏到菜单栏（由 Dart 通过 statusbar 通道推送，默认开启）。
   var closeToTray = true
@@ -21,6 +27,18 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     flutterViewController.backgroundColor = resolveInitialBackground()
 
     RegisterGeneratedPlugins(registry: flutterViewController)
+    FlutterMultiWindowPlugin.setOnWindowCreatedCallback { controller in
+      // desktop_multi_window 创建的子窗口不会经过 MainFlutterWindow.awakeFromNib，
+      // FlutterViewController 默认背景会把透明歌词窗口渲染成黑色不透明矩形。
+      controller.backgroundColor = NSColor.clear
+      controller.view.wantsLayer = true
+      controller.view.layer?.backgroundColor = NSColor.clear.cgColor
+      controller.view.window?.isOpaque = false
+      controller.view.window?.backgroundColor = NSColor.clear
+      controller.view.window?.hasShadow = false
+      MainFlutterWindow.registerDesktopLyricsChannel(for: controller)
+      RegisterGeneratedPlugins(registry: controller)
+    }
     // 窗口背景色同步通道：Flutter 侧把主题背景色（ARGB int）推到这里，
     // 覆盖上面的初始底色，并跟随主题/系统亮暗实时更新。
     let windowChannel = FlutterMethodChannel(
@@ -39,6 +57,20 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
       flutterViewController?.backgroundColor = NSColor(
         srgbRed: r, green: g, blue: b, alpha: a)
       result(nil)
+    }
+
+    systemFontsChannel = FlutterMethodChannel(
+      name: "com.feiniu.music/system_fonts",
+      binaryMessenger: flutterViewController.engine.binaryMessenger)
+    systemFontsChannel?.setMethodCallHandler { call, result in
+      guard call.method == "getFamilies" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      let families = NSFontManager.shared.availableFontFamilies.sorted {
+        $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
+      }
+      result(families)
     }
 
     // 拦截窗口关闭：设置开启时隐藏到菜单栏而非关闭（见 windowShouldClose）。
@@ -70,6 +102,41 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
       return NSColor(srgbRed: 0x08 / 255.0, green: 0x08 / 255.0, blue: 0x08 / 255.0, alpha: 1)
     }
     return NSColor(srgbRed: 0xF7 / 255.0, green: 0xF7 / 255.0, blue: 0xF7 / 255.0, alpha: 1)
+  }
+
+  /// 桌面歌词窗口的被动显示通道。
+  ///
+  /// window_manager 的 show() 在 macOS 上是 makeKeyAndOrderFront +
+  /// NSApp.activate(ignoringOtherApps:)，而桌面歌词服务每次播放进度更新都会
+  /// 调用一次显示：歌词窗口会反复抢走 key window，主窗口的设置页输入框
+  /// 刚聚焦就被夺走，表现为「输入框点不进去、打不了字」。
+  /// orderFrontRegardless() 只把窗口提到最前，不激活应用、不改动 key window。
+  private static func registerDesktopLyricsChannel(
+    for controller: FlutterViewController
+  ) {
+    let channel = FlutterMethodChannel(
+      name: "com.feiniu.music/desktop_lyrics_window/native",
+      binaryMessenger: controller.engine.binaryMessenger)
+    channel.setMethodCallHandler { [weak controller] call, result in
+      guard let window = controller?.view.window else {
+        result(FlutterError(code: "-1", message: "lyrics window is not ready", details: nil))
+        return
+      }
+      switch call.method {
+      case "showPassive":
+        window.level = .floating
+        window.hidesOnDeactivate = false
+        // 切 Space / 全屏应用时歌词不跟随消失。
+        window.collectionBehavior.insert([
+          .canJoinAllSpaces, .stationary, .fullScreenAuxiliary,
+        ])
+        window.orderFrontRegardless()
+        result(nil)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+    childWindowChannels.append(channel)
   }
 }
 

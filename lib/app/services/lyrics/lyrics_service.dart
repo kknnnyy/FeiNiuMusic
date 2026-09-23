@@ -66,6 +66,7 @@ class LyricsService {
       'lyrics_lyricon_hide_translation';
   static const String _prefsMeizuLyrics = 'lyrics_meizu_enabled';
   static const String _prefsViewForceKaraoke = 'lyrics_view_force_karaoke';
+  static const String _prefsViewFontFamily = 'lyrics_view_font_family';
   static const String _prefsViewInactiveColor = 'lyrics_view_inactive_color';
   static const String _prefsViewActiveColor = 'lyrics_view_active_color';
   static const String _prefsViewHighlightColor = 'lyrics_view_highlight_color';
@@ -83,6 +84,7 @@ class LyricsService {
   final ValueNotifier<int?> viewInactiveColor = ValueNotifier(null);
   final ValueNotifier<int?> viewActiveColor = ValueNotifier(null);
   final ValueNotifier<int?> viewHighlightColor = ValueNotifier(null);
+  final ValueNotifier<String> viewFontFamily = ValueNotifier('');
   late final snapshotSignal = signal(LyricsSnapshot.idle());
   late final viewSettingsTickSignal = signal(0);
   late final activeIndexSignal = signal(controller.activeIndexNotifiter.value);
@@ -127,9 +129,9 @@ class LyricsService {
     _player.currentSong.addListener(_onSongChanged);
     _player.position.addListener(_onPositionChanged);
     _player.isPlaying.addListener(_onPlayingChanged);
-    viewSettingsTick.addListener(_reloadViewColorPrefs);
+    viewSettingsTick.addListener(_reloadViewPrefs);
     refreshSettings();
-    _reloadViewColorPrefs();
+    _reloadViewPrefs();
     _onSongChanged();
   }
 
@@ -137,11 +139,12 @@ class LyricsService {
     viewSettingsTick.value = viewSettingsTick.value + 1;
   }
 
-  Future<void> _reloadViewColorPrefs() async {
+  Future<void> _reloadViewPrefs() async {
     final prefs = await SharedPreferences.getInstance();
     viewInactiveColor.value = prefs.getInt(_prefsViewInactiveColor);
     viewActiveColor.value = prefs.getInt(_prefsViewActiveColor);
     viewHighlightColor.value = prefs.getInt(_prefsViewHighlightColor);
+    viewFontFamily.value = prefs.getString(_prefsViewFontFamily) ?? '';
   }
 
   Future<void> refreshSettings() async {

@@ -9,6 +9,7 @@ class AppLayoutSettings {
   static const String _prefsTabletMode = 'setting_tablet_mode';
   static const String _prefsNavigationStyle = 'setting_navigation_style';
   static const String _prefsForceTvMode = 'setting_force_tv_mode';
+  static const String _prefsTvUiScaleOverride = 'setting_tv_ui_scale_override';
   static const String _prefsTvEdgeHintShown = 'setting_tv_edge_hint_shown';
   static const String _prefsTrackChangeNotify = 'setting_track_change_notify';
   static const String _prefsTrackChangeToastDurationMs =
@@ -36,6 +37,9 @@ class AppLayoutSettings {
   /// 由 [syncTvMode] 计算合并，不直接持久化（forceTvMode 才是持久化来源）。
   static final ValueNotifier<bool> tvMode = ValueNotifier(false);
 
+  /// null 使用按屏幕尺寸计算的推荐值；否则使用用户指定的 TV 侧栏/主页缩放。
+  static final ValueNotifier<double?> tvUiScaleOverride = ValueNotifier(null);
+
   /// 桌面端（Windows/macOS/Linux）恒用平板/大屏布局：侧边栏外壳，
   /// 无需屏幕尺寸判定。
   static bool get _forceTabletOnDesktop => isDesktop;
@@ -59,15 +63,17 @@ class AppLayoutSettings {
   static final ValueNotifier<bool> trackChangeNotify = ValueNotifier(false);
 
   /// 切歌通知·应用外通知子开关：后台播放切歌时用悬浮窗显示（需悬浮窗权限）。
-  static final ValueNotifier<bool> trackChangeOverlayNotify = ValueNotifier(false);
+  static final ValueNotifier<bool> trackChangeOverlayNotify = ValueNotifier(
+    false,
+  );
 
   /// 切歌提示展示时长（毫秒），默认 3s，范围 2s–10s。
-  static final ValueNotifier<int> trackChangeToastDurationMs =
-      ValueNotifier(3000);
+  static final ValueNotifier<int> trackChangeToastDurationMs = ValueNotifier(
+    3000,
+  );
 
   /// 平板/TV 切歌卡片大小倍数，默认 1.0（当前大小），范围 1.0–3.0。
-  static final ValueNotifier<double> trackChangeToastScale =
-      ValueNotifier(1.0);
+  static final ValueNotifier<double> trackChangeToastScale = ValueNotifier(1.0);
 
   /// 首次大屏默认值是否已应用过（同会话只应用一次）。
   static bool _firstUseLargeScreenApplied = false;
@@ -116,6 +122,28 @@ class AppLayoutSettings {
       ];
     }
     return const [DeviceOrientation.portraitUp];
+  }
+
+  /// 播放页可用方向。
+  ///
+  /// 手机仅在播放页临时开放横竖屏；平板沿用四方向，TV 仍保持横屏。
+  /// 离开播放页后必须重新应用 [orientationsForDevice]，避免其它手机页面
+  /// 也跟随设备旋转。
+  static List<DeviceOrientation> orientationsForPlayer({
+    required bool isTv,
+  }) {
+    if (isTv) {
+      return const [
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ];
+    }
+    return const [
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ];
   }
 
   /// 当前窗口逻辑尺寸最短边（dp），无视图时返回 0。
@@ -190,6 +218,8 @@ class AppLayoutSettings {
       orElse: () => AppNavigationStyle.bottomBar,
     );
     forceTvMode.value = prefs.getBool(_prefsForceTvMode) ?? false;
+    final savedTvScale = prefs.getDouble(_prefsTvUiScaleOverride);
+    tvUiScaleOverride.value = savedTvScale?.clamp(0.8, 1.5);
     _tvEdgeHintShown = prefs.getBool(_prefsTvEdgeHintShown) ?? false;
     trackChangeNotify.value = prefs.getBool(_prefsTrackChangeNotify) ?? false;
     trackChangeOverlayNotify.value =
@@ -239,6 +269,17 @@ class AppLayoutSettings {
     syncTvMode();
   }
 
+  static Future<void> setTvUiScaleOverride(double? scale) async {
+    final next = scale?.clamp(0.8, 1.5);
+    tvUiScaleOverride.value = next;
+    final prefs = await SharedPreferences.getInstance();
+    if (next == null) {
+      await prefs.remove(_prefsTvUiScaleOverride);
+    } else {
+      await prefs.setDouble(_prefsTvUiScaleOverride, next);
+    }
+  }
+
   static Future<void> setNavigationStyle(AppNavigationStyle style) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_prefsNavigationStyle, style.name);
@@ -279,6 +320,7 @@ class AppLayoutSettings {
     navigationStyle.value = AppNavigationStyle.bottomBar;
     forceTvMode.value = false;
     tvMode.value = false;
+    tvUiScaleOverride.value = null;
     _tvEdgeHintShown = true;
     trackChangeNotify.value = false;
     trackChangeOverlayNotify.value = false;

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../app/router/app_router.dart';
 import '../../app/services/feiniu/account_entry.dart';
 import '../../app/services/feiniu/account_store.dart';
+import '../../app/state/settings_layout_state.dart';
+import '../../app/tv/tv_layout.dart';
 
 /// 账号展示卡片（侧边栏与「我的」页共用）
 ///
@@ -39,14 +41,22 @@ class _AccountHeaderCardInner extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final scale = AppLayoutSettings.tvMode.value
+        ? TvLayout.uiScale(context)
+        : 1.0;
     return Material(
       color: Colors.transparent,
       child: InkWell(
         borderRadius: BorderRadius.circular(18),
-        onTap: onTap ??
-            () => Navigator.of(context).pushNamed(AppRoutes.accounts),
+        onTap:
+            onTap ?? () => Navigator.of(context).pushNamed(AppRoutes.accounts),
         child: Container(
-          padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
+          padding: EdgeInsets.fromLTRB(
+            12 * scale,
+            12 * scale,
+            8 * scale,
+            12 * scale,
+          ),
           decoration: BoxDecoration(
             color: scheme.primary.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(18),
@@ -54,7 +64,7 @@ class _AccountHeaderCardInner extends StatelessWidget {
           child: Row(
             children: [
               CircleAvatar(
-                radius: 18,
+                radius: 18 * scale,
                 backgroundColor: scheme.primary.withValues(alpha: 0.16),
                 child: Text(
                   account.username.isNotEmpty
@@ -63,28 +73,28 @@ class _AccountHeaderCardInner extends StatelessWidget {
                   style: TextStyle(
                     color: scheme.primary,
                     fontWeight: FontWeight.w700,
-                    fontSize: 16,
+                    fontSize: 16 * scale,
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: 12 * scale),
               Expanded(
                 child: Text(
                   account.username,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 15,
+                    fontSize: 15 * scale,
                     fontWeight: FontWeight.w700,
                     letterSpacing: -0.2,
                     color: scheme.onSurface,
                   ),
                 ),
               ),
-              const SizedBox(width: 4),
+              SizedBox(width: 4 * scale),
               Icon(
                 Icons.chevron_right_rounded,
-                size: 20,
+                size: 20 * scale,
                 color: scheme.onSurfaceVariant.withValues(alpha: 0.5),
               ),
             ],

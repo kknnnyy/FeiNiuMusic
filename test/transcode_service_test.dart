@@ -62,6 +62,17 @@ void main() {
     );
   });
 
+  test('new installations default to OPUS and present quality choices in order', () async {
+    SharedPreferences.setMockInitialValues({});
+    AppTranscodeSettings.resetForTest();
+    await AppTranscodeSettings.ensureLoaded();
+    expect(AppTranscodeSettings.format.value, TranscodeFormat.opus);
+    expect(
+      AppTranscodeSettings.availableFormats,
+      [TranscodeFormat.opus, TranscodeFormat.mp3],
+    );
+  });
+
   group('isTranscodeNeeded', () {
     test('不支持的格式返回 true', () {
       for (final f in ['dsf', 'dff', 'wma', 'ape', 'dts', 'aiff', 'DSF', ' Wma ']) {
