@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../../app/state/settings_layout_state.dart';
+import '../../../app/tv/tv_layout.dart';
+
 /// 首页模块小标题行 — 「标题」+ 右侧可选「全部 ›」。
 ///
 /// 相比旧 _HomeSectionCard 的 18/w700 大标题，这里改小改轻，
@@ -21,8 +24,11 @@ class HomeSectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scale = AppLayoutSettings.tvMode.value
+        ? TvLayout.uiScale(context)
+        : 1.0;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: EdgeInsets.only(bottom: 8 * scale),
       child: Row(
         children: [
           Expanded(
@@ -31,19 +37,22 @@ class HomeSectionHeader extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: theme.textTheme.titleLarge?.copyWith(
-                fontSize: 17,
+                fontSize: 17 * scale,
                 fontWeight: FontWeight.w700,
                 letterSpacing: -0.2,
               ),
             ),
           ),
-          if (trailing != null) ...[trailing!, const SizedBox(width: 4)],
+          if (trailing != null) ...[trailing!, SizedBox(width: 4 * scale)],
           if (onViewAll != null)
             TextButton(
               onPressed: onViewAll,
               style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                minimumSize: const Size(0, 32),
+                padding: EdgeInsets.symmetric(
+                  horizontal: 4 * scale,
+                  vertical: 2 * scale,
+                ),
+                minimumSize: Size(0, 32 * scale),
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
               child: Row(
@@ -52,13 +61,13 @@ class HomeSectionHeader extends StatelessWidget {
                   Text(
                     '全部',
                     style: TextStyle(
-                      fontSize: 13,
+                      fontSize: 13 * scale,
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
                   Icon(
                     Icons.chevron_right_rounded,
-                    size: 18,
+                    size: 18 * scale,
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ],
