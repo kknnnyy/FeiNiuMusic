@@ -144,7 +144,9 @@ seg1.m4s
         final registered = await MediaStreamProxy.instance.registerMedia(
           'http://127.0.0.1:$upstreamPort/track.mp3',
           headers: {'Cookie': 'music-token=xyz'},
+          fileExtension: 'mp3',
         );
+        expect(registered, endsWith('/media.mp3'));
         final client = HttpClient();
         try {
           final req = await client.getUrl(Uri.parse(registered!));
@@ -161,6 +163,15 @@ seg1.m4s
       } finally {
         await upstream.close(force: true);
       }
+    });
+
+    test('媒体代理 URL 保留音频格式后缀', () async {
+      final registered = await MediaStreamProxy.instance.registerMedia(
+        'http://nas/music/api/v1/track/stream?guid=flac-id',
+        fileExtension: 'flac',
+      );
+
+      expect(registered, endsWith('/media.flac'));
     });
 
     test('封面资源经 /r/<token> 匿名代理', () async {

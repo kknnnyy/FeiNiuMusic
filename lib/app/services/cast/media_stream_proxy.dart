@@ -25,6 +25,15 @@ class MediaStreamProxy {
 
   static const int _maxRedirects = 5;
 
+  static void _log(String message) {
+    // DebugLogService hooks debugPrint when the user enables diagnostics, so
+    // these messages remain exportable in release builds as well.
+    debugPrint('[MediaStreamProxy] $message');
+  }
+
+  static String _safeError(Object error) =>
+      error.toString().replaceAll(RegExp(r'https?://[^\s]+'), '<url>');
+
   HttpServer? _server;
   String? _token;
   String _proxyBase = '';
@@ -60,17 +69,13 @@ class MediaStreamProxy {
       server.listen(
         _handle,
         onError: (Object e, StackTrace st) {
-          if (kDebugMode) {
-            debugPrint('[MediaStreamProxy] server error: $e\n$st');
-          }
+          _log('server error: ${_safeError(e)}');
         },
       );
-      if (kDebugMode) {
-        debugPrint('[MediaStreamProxy] started at $_proxyBase');
-      }
+      _log('started at $_proxyBase');
       return _proxyBase;
     } catch (e) {
-      if (kDebugMode) debugPrint('[MediaStreamProxy] start failed: $e');
+      _log('start failed: ${_safeError(e)}');
       _server = null;
       _token = null;
       _proxyBase = '';
@@ -78,18 +83,25 @@ class MediaStreamProxy {
     }
   }
 
-  /// 注册一条上游媒体流，返回渲染器可用的代理 URL（`http://<ip>:<port>/m/<token>`）。
+  /// 注册一条上游媒体流，返回渲染器可用的代理 URL
+  /// （`http://<ip>:<port>/m/<token>/media.<ext>`）。
+  ///
+  /// DLNA 插件会根据 URL 后缀生成 DIDL `protocolInfo`。保留真实后缀可避免
+  /// FLAC/AAC 等直连流被错误声明为 `audio/mpeg`，部分严格渲染器会因此拒播。
   ///
   /// 同一时刻只代理一条流（单投屏会话）：注册新流会替换旧流。
   Future<String?> registerMedia(
     String upstreamUrl, {
     Map<String, String> headers = const {},
+    String fileExtension = 'mp3',
   }) async {
     final base = await start();
     if (base == null || _token == null) return null;
     _upstreamUrl = upstreamUrl;
     _upstreamHeaders = headers;
-    return '$base/m/$_token';
+    final safeExtension = _sanitizeExtension(fileExtension);
+    _log('registered media extension=$safeExtension');
+    return '$base/m/$_token/media.$safeExtension';
   }
 
   /// 清空当前注册的媒体流（断开投屏时调用）。代理服务本身保留。
@@ -167,11 +179,22 @@ class MediaStreamProxy {
           ? Uri.decodeComponent(queryU)
           : upstream;
 
-      await _forward(request, target, _upstreamHeaders);
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[MediaStreamProxy] handle error: $e');
+      final isPrimaryMediaRequest = queryU == null;
+      if (isPrimaryMediaRequest) {
+        final range = request.headers.value(HttpHeaders.rangeHeader);
+        _log(
+          'renderer request method=${request.method} resource=media '
+          'range=${range == null ? 'none' : 'present'}',
+        );
       }
+      await _forward(
+        request,
+        target,
+        _upstreamHeaders,
+        logResponse: isPrimaryMediaRequest,
+      );
+    } catch (e) {
+      _log('handle error: ${_safeError(e)}');
       _respondInternalError(request);
     }
   }
@@ -183,8 +206,9 @@ class MediaStreamProxy {
   Future<void> _forward(
     HttpRequest request,
     String target,
-    Map<String, String> headers,
-  ) async {
+    Map<String, String> headers, {
+    bool logResponse = true,
+  }) async {
     final client = HttpClient();
     try {
       var uri = Uri.parse(target);
@@ -214,14 +238,28 @@ class MediaStreamProxy {
         }
 
         final isM3u8 = _isM3u8(upResp, uri);
+        final contentType = upResp.headers.value(HttpHeaders.contentTypeHeader);
+        final contentLength = upResp.headers.value(
+          HttpHeaders.contentLengthHeader,
+        );
+        if (logResponse || upResp.statusCode >= HttpStatus.badRequest) {
+          _log(
+            'upstream response status=${upResp.statusCode} '
+            'type=${contentType ?? 'unknown'} '
+            'length=${contentLength ?? 'unknown'} '
+            'hls=$isM3u8',
+          );
+        }
         if (isM3u8 && request.method != 'HEAD') {
           // HLS：读取 m3u8 文本，改写分片地址后整体返回
           final text = await upResp.transform(utf8.decoder).join();
           final rewritten = _rewriteM3u8(text, uri);
           final response = request.response;
           response.statusCode = HttpStatus.ok;
-          response.headers.set(HttpHeaders.contentTypeHeader,
-              'application/vnd.apple.mpegurl; charset=utf-8');
+          response.headers.set(
+            HttpHeaders.contentTypeHeader,
+            'application/vnd.apple.mpegurl; charset=utf-8',
+          );
           response.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
           response.write(rewritten);
           await response.close();
@@ -309,10 +347,7 @@ class MediaStreamProxy {
   }
 
   /// 复制上游响应头里与媒体投递相关的字段到代理响应。
-  void _copyResponseHeaders(
-    HttpClientResponse from,
-    HttpResponse to,
-  ) {
+  void _copyResponseHeaders(HttpClientResponse from, HttpResponse to) {
     const allowlist = <String>{
       HttpHeaders.contentTypeHeader,
       HttpHeaders.contentLengthHeader,
@@ -347,6 +382,14 @@ class MediaStreamProxy {
   String _generateToken() {
     final rnd = Random.secure();
     return List.generate(24, (_) => rnd.nextInt(16).toRadixString(16)).join();
+  }
+
+  static String _sanitizeExtension(String raw) {
+    final normalized = raw.trim().toLowerCase().replaceFirst('.', '');
+    if (RegExp(r'^[a-z0-9]{1,8}$').hasMatch(normalized)) {
+      return normalized;
+    }
+    return 'mp3';
   }
 
   /// 构造代理对外基址：优先取本机局域网 IPv4（渲染器同网段可达），
