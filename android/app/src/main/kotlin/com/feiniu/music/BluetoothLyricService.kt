@@ -22,8 +22,8 @@ class BluetoothLyricService : Service() {
     companion object {
         private var instance: BluetoothLyricService? = null
 
-        fun updateLyric(lyric: String, artist: String = "FeiNiuMusic") {
-            instance?.updateLyrics(lyric, artist)
+        fun updateLyric(lyric: String, artist: String = "FeiNiuMusic", title: String = "") {
+            instance?.updateLyrics(lyric, artist, title)
         }
     }
 
@@ -37,9 +37,10 @@ class BluetoothLyricService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val lyric = intent?.getStringExtra("lyric") ?: ""
         val artist = intent?.getStringExtra("artist") ?: "FeiNiuMusic"
+        val title = intent?.getStringExtra("title") ?: ""
         
         startForeground(NOTIFICATION_ID, createNotification(lyric))
-        updateLyrics(lyric, artist)
+        updateLyrics(lyric, artist, title)
         
         return START_STICKY
     }
@@ -69,15 +70,19 @@ class BluetoothLyricService : Service() {
         mediaSession?.setPlaybackState(playbackState)
     }
 
-    private fun updateLyrics(lyric: String, artist: String) {
-        Log.d("BluetoothLyricService", "Pushing lyric: $lyric")
+    private fun updateLyrics(lyric: String, artist: String, title: String = "") {
+        Log.d("BluetoothLyricService", "Pushing lyric: $lyric, artist: $artist, title: $title")
 
-        val metadata = MediaMetadata.Builder()
+        val metadataBuilder = MediaMetadata.Builder()
             .putString(MediaMetadata.METADATA_KEY_TITLE, lyric.ifEmpty { " " })
             .putString(MediaMetadata.METADATA_KEY_ARTIST, artist)
-            .build()
-        
-        mediaSession?.setMetadata(metadata)
+
+        val albumName = title.ifEmpty { lyric }
+        if (albumName.isNotEmpty()) {
+            metadataBuilder.putString(MediaMetadata.METADATA_KEY_ALBUM, albumName)
+        }
+
+        mediaSession?.setMetadata(metadataBuilder.build())
         
         // The "nudge": update playback state to trigger AVRCP broadcast
         updatePlaybackState(PlaybackState.STATE_PLAYING)

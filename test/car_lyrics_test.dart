@@ -61,4 +61,54 @@ void main() {
       expect(override, '人生短短几个秋');
     });
   });
+
+  group('carLyricsAlbumOverride', () {
+    test('开关关闭时返回原始专辑名', () {
+      expect(
+        carLyricsAlbumOverride(
+          carLyricsEnabled: false,
+          isCurrentSong: true,
+          songTitle: '海阔天空',
+          songAlbum: '乐与怒',
+        ),
+        '乐与怒',
+      );
+    });
+
+    test('非当前歌曲时返回原始专辑名', () {
+      expect(
+        carLyricsAlbumOverride(
+          carLyricsEnabled: true,
+          isCurrentSong: false,
+          songTitle: '海阔天空',
+          songAlbum: '乐与怒',
+        ),
+        '乐与怒',
+      );
+    });
+
+    test('开启且为当前歌曲时返回歌曲名称', () {
+      expect(
+        carLyricsAlbumOverride(
+          carLyricsEnabled: true,
+          isCurrentSong: true,
+          songTitle: '  海阔天空  ',
+          songAlbum: '未知专辑',
+        ),
+        '海阔天空',
+      );
+    });
+
+    test('歌名为空或纯空白时回退原始专辑名', () {
+      expect(
+        carLyricsAlbumOverride(
+          carLyricsEnabled: true,
+          isCurrentSong: true,
+          songTitle: '   ',
+          songAlbum: '默认专辑',
+        ),
+        '默认专辑',
+      );
+    });
+  });
 }

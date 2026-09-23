@@ -24,8 +24,9 @@ class MediaNotificationService {
   static AudioHandler? _audioHandler;
   static VoidCallback? _initListener;
   static bool _initStarted = false;
-  static const MethodChannel _bluetoothChannel =
-      MethodChannel('com.feiniu.music/bluetooth_lyrics');
+  static const MethodChannel _bluetoothChannel = MethodChannel(
+    'com.feiniu.music/bluetooth_lyrics',
+  );
 
   /// AudioService.init 单次握手超时。Android Auto 场景下 configure 存在竞态
   /// （后台引擎先绑定 MediaBrowserService 时，configureResult 可能永远等不到
@@ -391,12 +392,18 @@ class _FeiNiuAudioHandler extends BaseAudioHandler
       isCurrentSong: isCurrentSong,
       currentCarLyricLine: carLyricLine,
     );
+    final effectiveAlbum = carLyricsAlbumOverride(
+      carLyricsEnabled: carLyricsEnabled,
+      isCurrentSong: isCurrentSong,
+      songTitle: song.title,
+      songAlbum: albumName,
+    );
     if (lyricOnTop && lyricLine != null) {
       return MediaItem(
         id: song.id,
         title: carLyricsOverride ?? lyricLine,
         artist: songAndArtist,
-        album: albumName,
+        album: effectiveAlbum,
         artUri: artUri,
         duration: song.durationMs != null
             ? Duration(milliseconds: song.durationMs!)
@@ -413,7 +420,7 @@ class _FeiNiuAudioHandler extends BaseAudioHandler
       id: song.id,
       title: carLyricsOverride ?? song.title,
       artist: carLyricsOverride != null ? songAndArtist : effectiveArtist,
-      album: albumName,
+      album: effectiveAlbum,
       artUri: artUri,
       duration: song.durationMs != null
           ? Duration(milliseconds: song.durationMs!)
@@ -1005,6 +1012,14 @@ class _FeiNiuAudioHandler extends BaseAudioHandler
     }
     _syncPlaybackState(snap);
     if (songChanged) {
+      if (MediaNotificationSettings.carBluetoothLyrics.value &&
+          snap.song != null) {
+        MediaNotificationService._bluetoothChannel.invokeMethod('updateLyric', {
+          'lyric': LyricsService.instance.currentLineText.value ?? '',
+          'artist': snap.song!.artistDisplayName,
+          'title': snap.song!.title,
+        });
+      }
       _refreshFavoriteState();
       _prewarmQueueCovers(snap);
     }
@@ -1209,6 +1224,7 @@ class _FeiNiuAudioHandler extends BaseAudioHandler
         MediaNotificationService._bluetoothChannel.invokeMethod('updateLyric', {
           'lyric': _currentLyricLine ?? '',
           'artist': song.artistDisplayName,
+          'title': song.title,
         });
       }
     }
@@ -1222,6 +1238,7 @@ class _FeiNiuAudioHandler extends BaseAudioHandler
       MediaNotificationService._bluetoothChannel.invokeMethod('startService', {
         'lyric': LyricsService.instance.currentLineText.value ?? '',
         'artist': song?.artistDisplayName ?? 'FeiNiuMusic',
+        'title': song?.title ?? '',
       });
     } else {
       MediaNotificationService._bluetoothChannel.invokeMethod('stopService');

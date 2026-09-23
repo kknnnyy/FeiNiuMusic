@@ -14,3 +14,17 @@ String? carLyricsTitleOverride({
   final line = currentCarLyricLine?.trim() ?? '';
   return line.isEmpty ? null : line;
 }
+
+/// 车载蓝牙歌词：开启且为当前歌曲时，返回要写入 `MediaItem.album` 的专辑名。
+/// 需求：在播放车载歌词时，将专辑名显示为歌曲名称。
+/// 如果车载蓝牙歌词未开启或非当前歌曲，则返回原始专辑名 [songAlbum]。
+String carLyricsAlbumOverride({
+  required bool carLyricsEnabled,
+  required bool isCurrentSong,
+  required String songTitle,
+  required String songAlbum,
+}) {
+  if (!carLyricsEnabled || !isCurrentSong) return songAlbum;
+  final title = songTitle.trim();
+  return title.isNotEmpty ? title : songAlbum;
+}

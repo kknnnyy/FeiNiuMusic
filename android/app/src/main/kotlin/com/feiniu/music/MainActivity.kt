@@ -352,9 +352,11 @@ class MainActivity : AudioServiceActivity() {
                 "startService" -> {
                     val lyric = call.argument<String>("lyric") ?: ""
                     val artist = call.argument<String>("artist") ?: "FeiNiuMusic"
+                    val title = call.argument<String>("title") ?: ""
                     val intent = Intent(this, BluetoothLyricService::class.java).apply {
                         putExtra("lyric", lyric)
                         putExtra("artist", artist)
+                        putExtra("title", title)
                     }
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                         startForegroundService(intent)
@@ -371,7 +373,8 @@ class MainActivity : AudioServiceActivity() {
                 "updateLyric" -> {
                     val lyric = call.argument<String>("lyric") ?: ""
                     val artist = call.argument<String>("artist") ?: "FeiNiuMusic"
-                    BluetoothLyricService.updateLyric(lyric, artist)
+                    val title = call.argument<String>("title") ?: ""
+                    BluetoothLyricService.updateLyric(lyric, artist, title)
                     result.success(true)
                 }
                 else -> result.notImplemented()
