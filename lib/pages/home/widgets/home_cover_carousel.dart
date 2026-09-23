@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../../app/services/feiniu/api_client.dart';
 import '../../../app/state/settings_layout_state.dart';
+import '../../../app/tv/tv_layout.dart';
 import '../../../components/common/cover_image_cache.dart';
 import '../../../components/focus/tv_focusable.dart';
 
@@ -50,18 +51,21 @@ class HomeCoverCarousel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scale = AppLayoutSettings.tvMode.value
+        ? TvLayout.uiScale(context)
+        : 1.0;
     // 是否有副标题决定容器高度：封面 + 标题行（无副标题），或
     // 封面 + 标题 + 副标题两行（有副标题）。避免无副标题时仍预留
     // 副标题行高度，造成卡片下方大片空白。
     final hasSubtitle = items.any((i) => i.subtitle.isNotEmpty);
-    final textHeight = hasSubtitle ? 38.0 : 22.0;
+    final textHeight = (hasSubtitle ? 38.0 : 22.0) * scale;
     return SizedBox(
       height: coverSize + textHeight,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         physics: const BouncingScrollPhysics(),
         itemCount: items.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 12),
+        separatorBuilder: (_, _) => SizedBox(width: 12 * scale),
         itemBuilder: (context, i) => _CarouselCard(
           item: items[i],
           coverSize: coverSize,
@@ -96,6 +100,7 @@ class _CarouselCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final coverId = item.coverId;
     final isTv = AppLayoutSettings.tvMode.value;
+    final scale = isTv ? TvLayout.uiScale(context) : 1.0;
     final memoryCacheSize = coverMemoryCacheDimensionOf(context, coverSize);
     final card = SizedBox(
       width: coverSize,
@@ -134,28 +139,28 @@ class _CarouselCard extends StatelessWidget {
                     )
                   : _coverPlaceholder(),
             ),
-            const SizedBox(height: 6),
+            SizedBox(height: 6 * scale),
             Text(
               item.title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: centerText ? TextAlign.center : null,
-              style: const TextStyle(
-                fontSize: 13,
+              style: TextStyle(
+                fontSize: 13 * scale,
                 height: 1.15,
                 fontWeight: FontWeight.w600,
               ),
             ),
             // 副标题为空时不占行，避免标题下方留白
             if (item.subtitle.isNotEmpty) ...[
-              const SizedBox(height: 1),
+              SizedBox(height: scale),
               Text(
                 item.subtitle,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textAlign: centerText ? TextAlign.center : null,
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: 11 * scale,
                   height: 1.15,
                   color: theme.colorScheme.onSurfaceVariant,
                 ),

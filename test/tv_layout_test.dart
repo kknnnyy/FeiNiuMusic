@@ -111,6 +111,58 @@ void main() {
     });
   });
 
+  testWidgets('TV 界面尺寸随逻辑分辨率增长并有上限', (tester) async {
+    Future<double> scaleAt(Size size) async {
+      double? scale;
+      await tester.pumpWidget(
+        MediaQuery(
+          data: MediaQueryData(size: size),
+          child: Builder(
+            builder: (context) {
+              scale = TvLayout.uiScale(context);
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      );
+      return scale!;
+    }
+
+    expect(await scaleAt(const Size(1280, 720)), 1);
+    expect(await scaleAt(const Size(1600, 900)), 1.25);
+    expect(await scaleAt(const Size(1920, 1080)), 1.3);
+    expect(await scaleAt(const Size(3840, 2160)), 1.3);
+  });
+
+  testWidgets('车机缩放可手动覆盖推荐值、持久化并恢复自动档', (tester) async {
+    double? scale;
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(size: Size(1920, 1080)),
+        child: Builder(
+          builder: (context) {
+            scale = TvLayout.uiScale(context);
+            return const SizedBox.shrink();
+          },
+        ),
+      ),
+    );
+    expect(scale, 1.3);
+
+    await AppLayoutSettings.setTvUiScaleOverride(1.5);
+    await tester.pump();
+    expect(TvLayout.uiScale(tester.element(find.byType(Builder))), 1.5);
+
+    AppLayoutSettings.resetForTest();
+    await AppLayoutSettings.ensureLoaded();
+    expect(AppLayoutSettings.tvUiScaleOverride.value, 1.5);
+
+    await AppLayoutSettings.setTvUiScaleOverride(null);
+    expect(TvLayout.uiScale(tester.element(find.byType(Builder))), 1.3);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.containsKey('setting_tv_ui_scale_override'), isFalse);
+  });
+
   group('AppLayoutSettings.consumeTvEdgeHint（首次启动提示）', () {
     test('首次调用返回 true，之后返回 false（只提醒一次）', () async {
       // 空 prefs 加载 → _tvEdgeHintShown=false（未展示过）。
