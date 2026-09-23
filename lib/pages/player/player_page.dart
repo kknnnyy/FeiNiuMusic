@@ -9,19 +9,19 @@ import 'package:skeletonizer/skeletonizer.dart';
 import 'package:signals_flutter/signals_flutter.dart' hide computed;
 
 import '../../app/router/app_router.dart';
-import '../../app/services/feiniu/favorite_service.dart';
 import '../../app/services/lyrics/lyrics_service.dart';
 import '../../app/services/player_service.dart';
 import '../../app/state/settings_state.dart';
 import '../../app/state/song_state.dart';
 import '../../app/utils/route_visibility.dart';
 import '../../components/common/artwork_widget.dart';
-import '../../components/feedback/app_toast.dart';
 import '../../components/player/lyric_preview.dart';
 import 'lyrics/lyric_view.dart';
+import 'widgets/player_audio_spec.dart';
 import 'widgets/player_background.dart';
 import 'widgets/player_bottom_panel.dart';
 import 'widgets/player_header.dart';
+import 'widgets/player_favorite_button.dart';
 import 'tv_player_focus_scope.dart';
 
 class PlayerPage extends StatefulWidget {
@@ -731,6 +731,7 @@ class _PosterPlayerLayout extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     _PosterSeekBar(player: player),
+                    PlayerAudioSpec(songListenable: player.currentSong),
                     const SizedBox(height: 20),
                     // 播放控制：行宽与轨道对齐（两端内缩 _posterTrackInset）。
                     Padding(
@@ -987,7 +988,7 @@ class _PosterMetaRow extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return Row(
       children: [
-        _PosterFavoriteButton(song: song),
+        PlayerFavoriteButton(song: song),
         const Spacer(),
         IconButton(
           visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
@@ -1001,103 +1002,6 @@ class _PosterMetaRow extends StatelessWidget {
           onPressed: () => showPlayerPlaylistSheet(context, player),
         ),
       ],
-    );
-  }
-}
-
-class _PosterFavoriteButton extends StatefulWidget {
-  final SongEntity? song;
-
-  const _PosterFavoriteButton({required this.song});
-
-  @override
-  State<_PosterFavoriteButton> createState() => _PosterFavoriteButtonState();
-}
-
-class _PosterFavoriteButtonState extends State<_PosterFavoriteButton> {
-  final FeiNiuFavoriteService _favoriteService = FeiNiuFavoriteService.instance;
-  bool _isFavorite = false;
-  bool _loading = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadFavoriteState();
-  }
-
-  @override
-  void didUpdateWidget(covariant _PosterFavoriteButton oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.song?.id != widget.song?.id) {
-      _loadFavoriteState();
-    }
-  }
-
-  Future<void> _loadFavoriteState() async {
-    final song = widget.song;
-    if (song == null) {
-      if (mounted) {
-        setState(() {
-          _isFavorite = false;
-          _loading = false;
-        });
-      }
-      return;
-    }
-    setState(() => _loading = true);
-    try {
-      final favIds = await _favoriteService.getFavoriteIds();
-      if (!mounted || widget.song?.id != song.id) return;
-      setState(() {
-        _isFavorite = favIds.contains(song.id);
-        _loading = false;
-      });
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _toggleFavorite() async {
-    final song = widget.song;
-    if (_loading || song == null) return;
-    setState(() => _loading = true);
-    try {
-      if (_isFavorite) {
-        await _favoriteService.unfavorite(song.id);
-        if (!mounted) return;
-        setState(() {
-          _isFavorite = false;
-          _loading = false;
-        });
-        AppToast.show(context, '已取消收藏');
-      } else {
-        await _favoriteService.favorite(song.id);
-        if (!mounted) return;
-        setState(() {
-          _isFavorite = true;
-          _loading = false;
-        });
-        AppToast.show(context, '已收藏');
-      }
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return IconButton(
-      visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
-      padding: EdgeInsets.zero,
-      constraints: const BoxConstraints.tightFor(width: 34, height: 34),
-      icon: Icon(
-        _isFavorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-        color: _isFavorite
-            ? Colors.deepOrangeAccent
-            : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.72),
-        size: 24,
-      ),
-      onPressed: widget.song == null || _loading ? null : _toggleFavorite,
     );
   }
 }

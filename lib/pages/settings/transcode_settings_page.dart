@@ -174,7 +174,7 @@ class _TranscodeSettingsPageState extends State<TranscodeSettingsPage> {
           ),
           const SizedBox(height: 8),
           Text(
-            'FLAC 为无损；MP3/OPUS 为有损',
+            'MP3 兼容性优先；OPUS 更省流量；FLAC 保留无损',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),

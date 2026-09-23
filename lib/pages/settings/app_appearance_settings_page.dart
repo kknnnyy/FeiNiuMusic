@@ -7,6 +7,7 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 
 import '../../app/state/settings_state.dart';
+import '../../app/tv/tv_layout.dart';
 import '../../app/utils/image_crop_helper.dart';
 import '../../components/index.dart';
 
@@ -370,6 +371,54 @@ class _AppAppearanceSettingsPageState extends State<AppAppearanceSettingsPage> {
                     value: enabled,
                     onChanged: (value) {
                       AppLayoutSettings.setForceTvMode(value);
+                    },
+                  );
+                },
+              ),
+              ValueListenableBuilder<bool>(
+                valueListenable: AppLayoutSettings.tvMode,
+                builder: (context, enabled, _) {
+                  if (!enabled) return const SizedBox.shrink();
+                  return ValueListenableBuilder<double?>(
+                    valueListenable: AppLayoutSettings.tvUiScaleOverride,
+                    builder: (context, override, _) {
+                      final recommended = TvLayout.recommendedUiScale(context);
+                      final current = override ?? recommended;
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          AppSettingSlider(
+                            title: '车机界面缩放',
+                            value: current * 100,
+                            min: 80,
+                            max: 150,
+                            divisions: 14,
+                            valueText:
+                                '${override == null ? '自动' : '自定义'} ${(current * 100).round()}%',
+                            description:
+                                '推荐 ${(recommended * 100).round()}% · 调整侧边栏和主页，播放界面独立',
+                            onChanged: (next) {
+                              AppLayoutSettings.setTvUiScaleOverride(
+                                next / 100,
+                              );
+                            },
+                          ),
+                          if (override != null)
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                              child: TextButton.icon(
+                                onPressed: () =>
+                                    AppLayoutSettings.setTvUiScaleOverride(
+                                      null,
+                                    ),
+                                icon: const Icon(Icons.auto_awesome_rounded),
+                                label: Text(
+                                  '使用推荐值 ${(recommended * 100).round()}%',
+                                ),
+                              ),
+                            ),
+                        ],
+                      );
                     },
                   );
                 },

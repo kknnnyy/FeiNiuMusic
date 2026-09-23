@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import '../../app/router/app_router.dart';
 import '../../app/services/feiniu/account_store.dart';
 import '../../app/state/settings_background_state.dart';
+import '../../app/state/settings_layout_state.dart';
 import '../../app/theme/app_styles.dart';
+import '../../app/tv/tv_layout.dart';
 import '../account/account_header_card.dart';
 import 'base/app_page_scaffold.dart';
 
@@ -20,6 +22,7 @@ class SideMenu extends StatelessWidget {
       animation: Listenable.merge([
         AppBackgroundSettings.backgroundImagePath,
         AppBackgroundSettings.pageGlowEnabled,
+        AppLayoutSettings.tvUiScaleOverride,
       ]),
       builder: (context, _) => _buildMenu(context),
     );
@@ -28,6 +31,9 @@ class SideMenu extends StatelessWidget {
   Widget _buildMenu(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final scale = AppLayoutSettings.tvMode.value
+        ? TvLayout.uiScale(context)
+        : 1.0;
 
     // 有全局背景时透出外壳的背景，遮罩与模糊由 AppBackground 统一处理。
     final hasBackground = theme.hasAmbientBackground;
@@ -62,14 +68,19 @@ class SideMenu extends StatelessWidget {
               _buildHeader(context),
               Expanded(
                 child: ListView(
-                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+                  padding: EdgeInsets.fromLTRB(
+                    12 * scale,
+                    4 * scale,
+                    12 * scale,
+                    12 * scale,
+                  ),
                   children: [
                     // 当前账号卡片（点击进入账号切换页，走内容区导航：与
                     // 顶部头部一致，避免从根 Navigator 压栈盖住整个平板外壳）
                     AccountHeaderCard(
                       onTap: () => _pushAndClose(context, AppRoutes.accounts),
                     ),
-                    const SizedBox(height: 10),
+                    SizedBox(height: 10 * scale),
                     _GroupCard(
                       title: '浏览',
                       color: cardColor,
@@ -101,7 +112,7 @@ class SideMenu extends StatelessWidget {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 10),
+                    SizedBox(height: 10 * scale),
                     _GroupCard(
                       title: '资源库',
                       color: cardColor,
@@ -133,7 +144,7 @@ class SideMenu extends StatelessWidget {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 10),
+                    SizedBox(height: 10 * scale),
                     _GroupCard(
                       title: '更多',
                       color: cardColor,
@@ -171,6 +182,9 @@ class SideMenu extends StatelessWidget {
   Widget _buildHeader(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final scale = AppLayoutSettings.tvMode.value
+        ? TvLayout.uiScale(context)
+        : 1.0;
     return ValueListenableBuilder<String?>(
       valueListenable: AccountStore.instance.currentAccountId,
       builder: (context, accountId, _) {
@@ -185,12 +199,17 @@ class SideMenu extends StatelessWidget {
                 ? _pushAndClose(context, AppRoutes.accounts)
                 : _navigateAndClose(context, AppRoutes.home),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
+              padding: EdgeInsets.fromLTRB(
+                18 * scale,
+                18 * scale,
+                18 * scale,
+                14 * scale,
+              ),
               child: Row(
                 children: [
                   Container(
-                    width: 46,
-                    height: 46,
+                    width: 46 * scale,
+                    height: 46 * scale,
                     clipBehavior: Clip.antiAlias,
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(14),
@@ -207,7 +226,7 @@ class SideMenu extends StatelessWidget {
                       fit: BoxFit.cover,
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  SizedBox(width: 12 * scale),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -219,13 +238,13 @@ class SideMenu extends StatelessWidget {
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
-                                  fontSize: 17,
+                                  fontSize: 17 * scale,
                                   fontWeight: FontWeight.w800,
                                   letterSpacing: -0.2,
                                   color: scheme.onSurface,
                                 ),
                               ),
-                              const SizedBox(height: 1),
+                              SizedBox(height: scale),
                               Tooltip(
                                 message: account.serverUrl,
                                 child: Text(
@@ -233,7 +252,7 @@ class SideMenu extends StatelessWidget {
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
-                                    fontSize: 11,
+                                    fontSize: 11 * scale,
                                     color: scheme.onSurfaceVariant.withValues(
                                       alpha: 0.8,
                                     ),
@@ -247,19 +266,19 @@ class SideMenu extends StatelessWidget {
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
-                                  fontSize: 17,
+                                  fontSize: 17 * scale,
                                   fontWeight: FontWeight.w800,
                                   letterSpacing: -0.2,
                                   color: scheme.onSurface,
                                 ),
                               ),
-                              const SizedBox(height: 1),
+                              SizedBox(height: scale),
                               Text(
                                 '第三方客户端',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
-                                  fontSize: 11,
+                                  fontSize: 11 * scale,
                                   color: scheme.onSurfaceVariant.withValues(
                                     alpha: 0.8,
                                   ),
@@ -338,6 +357,9 @@ class _GroupCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scale = AppLayoutSettings.tvMode.value
+        ? TvLayout.uiScale(context)
+        : 1.0;
     return Container(
       decoration: BoxDecoration(
         color: color,
@@ -350,27 +372,32 @@ class _GroupCard extends StatelessWidget {
           ),
         ],
       ),
-      padding: const EdgeInsets.fromLTRB(6, 8, 6, 6),
+      padding: EdgeInsets.fromLTRB(6 * scale, 8 * scale, 6 * scale, 6 * scale),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(10, 2, 10, 4),
+            padding: EdgeInsets.fromLTRB(
+              10 * scale,
+              2 * scale,
+              10 * scale,
+              4 * scale,
+            ),
             child: Row(
               children: [
                 Container(
-                  width: 4,
-                  height: 12,
+                  width: 4 * scale,
+                  height: 12 * scale,
                   decoration: BoxDecoration(
                     color: accent,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
-                const SizedBox(width: 6),
+                SizedBox(width: 6 * scale),
                 Text(
                   title,
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 12 * scale,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.5,
                     color: accent.withValues(alpha: 0.9),
@@ -400,6 +427,9 @@ class _MenuItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final scale = AppLayoutSettings.tvMode.value
+        ? TvLayout.uiScale(context)
+        : 1.0;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -408,27 +438,30 @@ class _MenuItem extends StatelessWidget {
         hoverColor: scheme.primary.withValues(alpha: 0.05),
         highlightColor: scheme.primary.withValues(alpha: 0.05),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          padding: EdgeInsets.symmetric(
+            horizontal: 10 * scale,
+            vertical: 8 * scale,
+          ),
           child: Row(
             children: [
               Container(
-                width: 36,
-                height: 36,
+                width: 36 * scale,
+                height: 36 * scale,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   color: scheme.primary.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(11),
                 ),
-                child: Icon(icon, size: 20, color: scheme.primary),
+                child: Icon(icon, size: 20 * scale, color: scheme.primary),
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: 12 * scale),
               Expanded(
                 child: Text(
                   label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 15.5,
+                    fontSize: 15.5 * scale,
                     fontWeight: FontWeight.w600,
                     color: scheme.onSurface,
                   ),
@@ -436,7 +469,7 @@ class _MenuItem extends StatelessWidget {
               ),
               Icon(
                 Icons.chevron_right_rounded,
-                size: 19,
+                size: 19 * scale,
                 color: scheme.onSurfaceVariant.withValues(alpha: 0.4),
               ),
             ],

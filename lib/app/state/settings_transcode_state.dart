@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 转码输出格式。
-enum TranscodeFormat { flac, mp3, opus }
+enum TranscodeFormat { mp3, opus, flac }
 
 /// 转码设置。
 ///
@@ -31,7 +31,7 @@ class AppTranscodeSettings {
   static final ValueNotifier<bool> transcodeAll = ValueNotifier(true);
   static final ValueNotifier<int> thresholdMb = ValueNotifier(defaultThresholdMb);
   static final ValueNotifier<TranscodeFormat> format =
-      ValueNotifier(TranscodeFormat.flac);
+      ValueNotifier(TranscodeFormat.mp3);
   static final ValueNotifier<bool> directOnWifi = ValueNotifier(false);
 
   static Future<void>? _loading;
@@ -48,7 +48,7 @@ class AppTranscodeSettings {
     final saved = prefs.getString(_prefsFormat);
     format.value = TranscodeFormat.values.firstWhere(
       (f) => f.name == saved,
-      orElse: () => TranscodeFormat.flac,
+      orElse: () => TranscodeFormat.mp3,
     );
     directOnWifi.value = prefs.getBool(_prefsDirectOnWifi) ?? false;
   }
@@ -90,7 +90,7 @@ class AppTranscodeSettings {
     enabled.value = false;
     transcodeAll.value = true;
     thresholdMb.value = defaultThresholdMb;
-    format.value = TranscodeFormat.flac;
+    format.value = TranscodeFormat.mp3;
     directOnWifi.value = false;
   }
 }

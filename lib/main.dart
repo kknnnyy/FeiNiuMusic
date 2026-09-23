@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui' show PlatformDispatcher;
 
+import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_displaymode/flutter_displaymode.dart';
@@ -18,6 +19,7 @@ import 'app/services/desktop_tray_service.dart';
 import 'app/services/fn_auto_reconnect_service.dart';
 import 'app/services/island_lyric_service.dart';
 import 'app/services/macos_status_bar_service.dart';
+import 'app/services/desktop_lyrics_service.dart';
 import 'app/services/macos_window_background_service.dart';
 import 'app/services/media_notification_service.dart';
 import 'app/services/network_connection_service.dart';
@@ -33,8 +35,19 @@ import 'app/state/settings_island_lyric.dart';
 import 'app/state/settings_lyric_companion.dart';
 import 'app/state/settings_match.dart';
 import 'app/state/settings_state.dart';
+import 'pages/player/desktop_lyrics_window.dart';
 
-Future<void> main() async {
+Future<void> main(List<String> args) async {
+  WidgetsFlutterBinding.ensureInitialized();
+  if (DesktopLyricsService.supported) {
+    final windowController = await WindowController.fromCurrentEngine();
+    if (DesktopLyricsService.isDesktopLyricsWindow(
+      windowController.arguments,
+    )) {
+      await runDesktopLyricsWindow(windowController);
+      return;
+    }
+  }
   // 在一切之前安装进程级 SSL 拦截钩子
   // 此钩子覆盖进程内所有 HttpClient（Dio、CachedNetworkImage/flutter_cache_manager 等共用），
   // 使 SSL 忽略开关全局生效，无需逐处配置。
@@ -42,7 +55,6 @@ Future<void> main() async {
     HttpOverrides.global = _SslOverride();
   }
 
-  WidgetsFlutterBinding.ensureInitialized();
   // 便携模式：Windows 下把数据目录重定向到 exe 旁 `feiniumusic_data/`。
   // 必须在任何 SharedPreferences / path_provider 读取之前替换全局实例，
   // 否则 prefs/数据库/缓存会落回系统 %APPDATA%。
@@ -142,6 +154,10 @@ Future<void> main() async {
     // 窗口背景同步：把主题背景色推给原生 FlutterView，覆盖引擎默认黑底，
     // 消除滚动/切页时合成间隙露黑底的整窗闪烁。
     await MacosWindowBackgroundService.init();
+  }
+  // 桌面歌词使用 Flutter 第二窗口，macOS / Windows / Linux 共用渲染和样式。
+  if (DesktopLyricsService.supported) {
+    await DesktopLyricsService.init();
   }
   // 切歌通知监听：PlayerService 已构造（MediaNotificationService.init 内），
   // AppLayoutSettings 已在上面 ensureLoaded，可安全订阅 currentSong。

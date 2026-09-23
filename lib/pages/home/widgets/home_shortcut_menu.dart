@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../../app/state/settings_layout_state.dart';
+import '../../../app/tv/tv_layout.dart';
+
 /// 首页功能入口卡片数据
 class HomeShortcutItem {
   final IconData icon;
@@ -81,7 +84,10 @@ class _ShortcutItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accent = item.accent;
-    final iconSize = 44.0;
+    final scale = AppLayoutSettings.tvMode.value
+        ? TvLayout.uiScale(context)
+        : 1.0;
+    final iconSize = 44.0 * scale;
     // 四宫格项是 Material + InkWell：本身可聚焦（Material 自带焦点环 +
     // 主题 focusColor 高亮），聚焦范围即完整卡片。不再包 TvFocusable
     // 缩放/描边，避免聚焦范围只剩图标一小块、右侧空白。
@@ -92,7 +98,7 @@ class _ShortcutItem extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         onTap: item.onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12),
+          padding: EdgeInsets.symmetric(vertical: 12 * scale),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -106,13 +112,13 @@ class _ShortcutItem extends StatelessWidget {
                 ),
                 child: Icon(item.icon, size: iconSize * 0.5, color: accent),
               ),
-              const SizedBox(height: 6),
+              SizedBox(height: 6 * scale),
               Text(
                 item.label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 12 * scale,
                   fontWeight: FontWeight.w600,
                   color: scheme.onSurfaceVariant,
                 ),

@@ -18,6 +18,7 @@ import '../../../components/feedback/app_toast.dart';
 import '../../../components/player/lyric_preview.dart';
 import '../../library/library_detail_pages.dart';
 import '../../songs/song_detail_sheet.dart';
+import 'player_audio_spec.dart';
 import 'player_background.dart';
 
 class PlayerBottomPanel extends StatelessWidget {
@@ -56,6 +57,7 @@ class PlayerBottomPanel extends StatelessWidget {
           if (showMiniLyrics)
             _MiniLyricsPreview(onTap: onTapLyrics, stylePreset: stylePreset),
           _PlayerSeekBar(player: player, stylePreset: stylePreset),
+          PlayerAudioSpec(songListenable: player.currentSong),
           SizedBox(height: compact ? 4 : 20),
           PlayerControls(
             player: player,

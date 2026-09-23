@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../app/router/app_router.dart';
 import '../../app/state/settings_state.dart';
+import '../../app/tv/tv_layout.dart';
 import '../feedback/app_toast.dart';
 import '../focus/tv_focusable.dart';
 import 'base/app_background.dart';
@@ -39,13 +40,16 @@ class _TabletLayoutHostState extends State<TabletLayoutHost>
     if (AppLayoutSettings.effectiveTabletMode) {
       _controller.value = 1;
     }
-    AppLayoutSettings.effectiveTabletModeNotifier.addListener(_handleModeChanged);
+    AppLayoutSettings.effectiveTabletModeNotifier.addListener(
+      _handleModeChanged,
+    );
   }
 
   @override
   void dispose() {
-    AppLayoutSettings.effectiveTabletModeNotifier
-        .removeListener(_handleModeChanged);
+    AppLayoutSettings.effectiveTabletModeNotifier.removeListener(
+      _handleModeChanged,
+    );
     _controller.dispose();
     super.dispose();
   }
@@ -68,13 +72,19 @@ class _TabletLayoutHostState extends State<TabletLayoutHost>
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: _controller,
+      animation: Listenable.merge([
+        _controller,
+        AppLayoutSettings.tvUiScaleOverride,
+      ]),
       builder: (context, child) {
         final t = _controller.value;
         final width = MediaQuery.sizeOf(context).width;
         // TV 用更宽的 10-foot 侧栏；手机/平板保持原 200-300 钳制。
+        final tvScale = TvLayout.uiScale(context);
         final drawerWidth = AppLayoutSettings.tvMode.value
-            ? (width * 0.28).clamp(320.0, 360.0)
+            ? (width * 0.28)
+                  .clamp(320.0 * tvScale, 360.0 * tvScale)
+                  .clamp(0.0, width * 0.45)
             : (width * 0.32).clamp(200.0, 300.0);
         final pageOffset = drawerWidth * t;
         final scale = 1 - (0.02 * t);
@@ -93,18 +103,19 @@ class _TabletLayoutHostState extends State<TabletLayoutHost>
               builder: (context, playerActive, _) {
                 // TV 模式且播放页激活 → 隐藏侧栏与迷你播放器（只盖不卸载，
                 // 返回后自动还原）。手机/平板非 TV 恒 false，行为不变。
-                final hideChrome = AppLayoutSettings.tvMode.value && playerActive;
+                final hideChrome =
+                    AppLayoutSettings.tvMode.value && playerActive;
                 // 隐藏 chrome 时内容区铺满全屏：去掉左偏移/宽度收缩/缩放/圆角/
                 // 阴影，让播放页延伸到屏幕左边，不留空白。
                 final effOffset = hideChrome ? 0.0 : pageOffset;
                 final effContentWidth = hideChrome ? width : contentWidth;
                 final effScale = hideChrome ? 1.0 : scale;
                 final effRadius = hideChrome ? 0.0 : pageRadius;
-                final effShadow = hideChrome
-                    ? Colors.transparent
-                    : pageShadow;
+                final effShadow = hideChrome ? Colors.transparent : pageShadow;
                 final effBlur = hideChrome ? 0.0 : 28 * t;
-                final effShadowOffset = hideChrome ? Offset.zero : Offset(0, 10 * t);
+                final effShadowOffset = hideChrome
+                    ? Offset.zero
+                    : Offset(0, 10 * t);
                 return Stack(
                   children: [
                     Positioned.fill(
@@ -118,7 +129,9 @@ class _TabletLayoutHostState extends State<TabletLayoutHost>
                               width: effContentWidth,
                               child: DecoratedBox(
                                 decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(effRadius),
+                                  borderRadius: BorderRadius.circular(
+                                    effRadius,
+                                  ),
                                   boxShadow: [
                                     BoxShadow(
                                       color: effShadow,
@@ -128,7 +141,9 @@ class _TabletLayoutHostState extends State<TabletLayoutHost>
                                   ],
                                 ),
                                 child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(effRadius),
+                                  borderRadius: BorderRadius.circular(
+                                    effRadius,
+                                  ),
                                   child: Transform.scale(
                                     scale: effScale,
                                     alignment: Alignment.centerLeft,
@@ -306,8 +321,9 @@ class _RootBackHandlerState extends State<_RootBackHandler> {
           return;
         }
         if (_subtreeCanPop) {
-          final popped = await (widget.navigatorKey.currentState?.maybePop() ??
-              Future.value(false));
+          final popped =
+              await (widget.navigatorKey.currentState?.maybePop() ??
+                  Future.value(false));
           // 确实弹出子页面 → 正常返回；否则（maybePop 冒泡到根 = 在首页）
           // 落到下面的待退出提示。
           if (popped) return;
