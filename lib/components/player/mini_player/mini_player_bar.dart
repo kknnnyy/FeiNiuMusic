@@ -11,6 +11,7 @@ import '../../../app/state/song_state.dart';
 import '../../../app/theme/app_glass_theme.dart';
 import '../../common/artwork_widget.dart';
 import '../../common/glass_gate.dart';
+import '../../common/native_liquid_glass.dart';
 import '../../player/lyric_preview.dart';
 import '../../../pages/player/player_page.dart';
 import '../../../pages/player/widgets/player_bottom_panel.dart';
@@ -49,10 +50,9 @@ class MiniPlayerBar extends StatelessWidget {
     return ValueListenableBuilder<bool>(
       valueListenable: AppBackgroundSettings.panelBlurEnabled,
       builder: (context, blurEnabled, _) {
-        final baseStrength =
-            blurEnabled
-                ? AppBackgroundSettings.panelBlurStrength.value
-                : 0.0;
+        final baseStrength = blurEnabled
+            ? AppBackgroundSettings.panelBlurStrength.value
+            : 0.0;
         return _buildBar(context, baseStrength);
       },
     );
@@ -113,10 +113,7 @@ class MiniPlayerBar extends StatelessWidget {
             borderRadius: BorderRadius.circular(borderRadius),
             onTap: openPlayer,
             child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 10,
-                vertical: 7,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   // When the drawer squeezes this bar, drop the trailing
@@ -146,9 +143,7 @@ class MiniPlayerBar extends StatelessWidget {
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withValues(
-                                    alpha: 0.12,
-                                  ),
+                                  color: Colors.black.withValues(alpha: 0.12),
                                   blurRadius: 6,
                                   offset: const Offset(0, 1),
                                 ),
@@ -195,30 +190,49 @@ class MiniPlayerBar extends StatelessWidget {
           child: inner,
         );
 
-        // 玻璃面只作为「背景层」：GlassContainer 内不放内容，只放一个占满的
-        // 空子层贡献玻璃形状/尺寸。内容（inner，含逐字歌词/进度环）作为
-        // Stack 中的兄弟层叠在玻璃之上，与玻璃自己的 RepaintBoundary 分离。
+        // 玻璃面只作为「背景层」：容器内不放内容，只放一个占满的空子层贡献
+        // 玻璃形状/尺寸。内容（inner，含逐字歌词/进度环）作为 Stack 中的兄弟层
+        // 叠在玻璃之上，与玻璃自己的 RepaintBoundary 分离。
         // 否则逐字歌词每帧重绘都在玻璃的 RepaintBoundary 内，会带动整块
         // 玻璃 blur+shader 重新采样（与下方 original 分支把 BackdropFilter
         // 与内容分层、避免动画触发整页重新模糊是同一思路）。
-        final glassSurface = GlassContainer(
-          shape: LiquidRoundedRectangle(borderRadius: borderRadius),
-          clipBehavior: Clip.antiAlias,
-          // 与底栏同款深折射参数，但玻璃罩更透（白 24% → 白 10%）：迷你播放器
-          // 是大面积全宽面板，同样不透明度会罩成一片白雾（「像高斯模糊」），
-          // 降低罩子后背后内容透出更多、折射可见，才有玻璃的通透感。
-          settings: kAppGlassSurfaceSettings.copyWith(
-            glassColor: const Color(0x1AFFFFFF),
-          ),
-          // 独立渲染层 + 与全局主题一致的 standard 质量（0.30.2 Skia 路径下
-          // premium 需要 blend group 多通道，且滚动时整条全宽面板逐帧重采样，
-          // 是滚动黑屏闪烁/掉帧的主要来源；Windows 端本就静态封顶 standard，
-          // 此改动仅影响 macOS 观感——折射略弱）。如偏好更通透的折射可改回
-          // premium，但需接受滚动时的重采样开销。
-          useOwnLayer: true,
-          quality: GlassQuality.standard,
-          child: const SizedBox.expand(),
-        );
+        //
+        // Android 走原生液态玻璃（QWEA0/Liquid-Glass-Android）平台视图背景层，
+        // 参数用框架 Quick Start 标准配方（透明 tint + 明暗自适应），其余
+        // 平台沿用 liquid_glass_widgets 的 GlassContainer。
+        final glassSurface = NativeLiquidGlass.supported
+            ? ValueListenableBuilder<double>(
+                valueListenable: AppGlassSettings.glassBlurStrength,
+                builder: (context, blur, _) => ValueListenableBuilder<double>(
+                  valueListenable: AppGlassSettings.glassThickness,
+                  builder: (context, thickness, _) => NativeLiquidGlass(
+                    borderRadius: borderRadius,
+                    blur: blur,
+                    thickness: thickness,
+                    // CLEAR 材质 = iOS 26 "Clear"（高透 + 固定压暗层）：大面积
+                    // 全宽面板用 REGULAR 会罩出白雾，CLEAR 最通透。
+                    material: 'clear',
+                  ),
+                ),
+              )
+            : GlassContainer(
+                shape: LiquidRoundedRectangle(borderRadius: borderRadius),
+                clipBehavior: Clip.antiAlias,
+                // 与底栏同款深折射参数，但玻璃罩更透（白 24% → 白 10%）：迷你播放器
+                // 是大面积全宽面板，同样不透明度会罩成一片白雾（「像高斯模糊」），
+                // 降低罩子后背后内容透出更多、折射可见，才有玻璃的通透感。
+                settings: kAppGlassSurfaceSettings.copyWith(
+                  glassColor: const Color(0x1AFFFFFF),
+                ),
+                // 独立渲染层 + 与全局主题一致的 standard 质量（0.30.2 Skia 路径下
+                // premium 需要 blend group 多通道，且滚动时整条全宽面板逐帧重采样，
+                // 是滚动黑屏闪烁/掉帧的主要来源；Windows 端本就静态封顶 standard，
+                // 此改动仅影响 macOS 观感——折射略弱）。如偏好更通透的折射可改回
+                // premium，但需接受滚动时的重采样开销。
+                useOwnLayer: true,
+                quality: GlassQuality.standard,
+                child: const SizedBox.expand(),
+              );
 
         return Padding(
           padding: padding,
@@ -649,14 +663,12 @@ class _SwipeableInfoState extends State<_SwipeableInfo>
             // 用动画值（回弹期间）否则用拖动值（拖动中），
             // 让提示随回弹动画一起淡出，而不是动画结束才消失。
             final currentOffset = _animation?.value ?? _dragOffsetX;
-            final prevOpacity =
-                hasSong && currentOffset > 0
-                    ? (currentOffset / 60.0).clamp(0.0, 1.0)
-                    : 0.0;
-            final nextOpacity =
-                hasSong && currentOffset < 0
-                    ? ((-currentOffset) / 60.0).clamp(0.0, 1.0)
-                    : 0.0;
+            final prevOpacity = hasSong && currentOffset > 0
+                ? (currentOffset / 60.0).clamp(0.0, 1.0)
+                : 0.0;
+            final nextOpacity = hasSong && currentOffset < 0
+                ? ((-currentOffset) / 60.0).clamp(0.0, 1.0)
+                : 0.0;
             return Stack(
               children: [
                 // 左侧「上一曲」提示：右滑时在原位淡入
@@ -858,7 +870,10 @@ class _MiniPlayerSubtitleText extends StatelessWidget {
       return (baseFontSize, true);
     }
     final ratio = fitWidth / widthAt(baseFontSize);
-    final shrunk = (baseFontSize * ratio).clamp(baseFontSize * 0.6, baseFontSize);
+    final shrunk = (baseFontSize * ratio).clamp(
+      baseFontSize * 0.6,
+      baseFontSize,
+    );
     // 缩小到下限后仍超宽 → 放不下，回退省略号
     if (widthAt(shrunk) > fitWidth) {
       return (baseFontSize, false);
@@ -925,9 +940,7 @@ class MiniPlayerPlayButton extends StatelessWidget {
                 else
                   IconButton(
                     icon: Icon(
-                      playing
-                          ? Icons.pause_rounded
-                          : Icons.play_arrow_rounded,
+                      playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
                       color: scheme.onSurface,
                       size: 20,
                     ),

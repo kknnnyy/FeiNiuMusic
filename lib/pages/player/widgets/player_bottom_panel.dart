@@ -1,5 +1,6 @@
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter_lyric/core/lyric_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -12,7 +13,9 @@ import '../../../app/services/player_service.dart';
 import '../../../app/state/settings_state.dart';
 import '../../../app/state/song_state.dart';
 import '../../../components/common/artwork_widget.dart';
+import '../../../components/common/glass_gate.dart';
 import '../../../components/common/labeled_slider.dart';
+import '../../../components/common/native_liquid_glass.dart';
 import '../../../components/common/playing_bars.dart';
 import '../../../components/feedback/app_toast.dart';
 import '../../../components/player/lyric_preview.dart';
@@ -655,6 +658,58 @@ class _PlayerSheetView extends StatelessWidget {
     required this.body,
   });
 
+  /// 中间层背景面：Android+液体玻璃开启 → 原生玻璃（CLEAR 材质）；否则
+  /// 原方案（BackdropFilter 按开关/强度叠加遮罩）。
+  Widget _buildBackdropSurface({
+    required ValueListenable<bool> blurEnabledListenable,
+    required ValueListenable<double> blurStrengthListenable,
+  }) {
+    Widget fallback() {
+      return ValueListenableBuilder<bool>(
+        valueListenable: blurEnabledListenable,
+        builder: (context, blurEnabled, _) {
+          return ValueListenableBuilder<double>(
+            valueListenable: blurStrengthListenable,
+            builder: (context, blurStrength, _) {
+              final effective = blurEnabled ? blurStrength : 0.0;
+              final mask = Container(color: maskColor);
+              if (effective <= 0) return mask;
+              return RepaintBoundary(
+                child: BackdropFilter(
+                  filter: ui.ImageFilter.blur(
+                    sigmaX: effective,
+                    sigmaY: effective,
+                  ),
+                  child: mask,
+                ),
+              );
+            },
+          );
+        },
+      );
+    }
+
+    if (!NativeLiquidGlass.supported) return fallback();
+    // 原生玻璃圆角与面板顶部 16dp 一致；原生圆角为四角统一，底缘位于
+    // 屏幕底部，观感接近悬浮面板。CLEAR 材质（媒体之上最通透）；玻璃参数
+    // 跟随设置页滑条（模糊强度/折射厚度）实时变化。
+    return GlassGate(
+      glass: ValueListenableBuilder<double>(
+        valueListenable: AppGlassSettings.glassBlurStrength,
+        builder: (context, blur, _) => ValueListenableBuilder<double>(
+          valueListenable: AppGlassSettings.glassThickness,
+          builder: (context, thickness, _) => NativeLiquidGlass(
+            borderRadius: 16,
+            material: 'clear',
+            blur: blur,
+            thickness: thickness,
+          ),
+        ),
+      ),
+      original: fallback(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -667,28 +722,14 @@ class _PlayerSheetView extends StatelessWidget {
         child: Stack(
           children: [
             PlayerBackground(songSignal: player.currentSongSignal),
+            // 中间层：背景玻璃。Android 且开启液体玻璃时走原生
+            // （QWEA0/Liquid-Glass-Android）CLEAR 材质（媒体之上高透 + 压暗
+            // 层），折射 PlayerBackground 的专辑封面；其余情况维持原
+            // BackdropFilter+遮罩方案。
             RepaintBoundary(
-              child: ValueListenableBuilder<bool>(
-                valueListenable: AppBackgroundSettings.panelBlurEnabled,
-                builder: (context, blurEnabled, _) {
-                  return ValueListenableBuilder<double>(
-                    valueListenable: AppBackgroundSettings.panelBlurStrength,
-                    builder: (context, blurStrength, _) {
-                      final effective = blurEnabled ? blurStrength : 0.0;
-                      final mask = Container(color: maskColor);
-                      if (effective <= 0) return mask;
-                      return RepaintBoundary(
-                        child: BackdropFilter(
-                          filter: ui.ImageFilter.blur(
-                            sigmaX: effective,
-                            sigmaY: effective,
-                          ),
-                          child: mask,
-                        ),
-                      );
-                    },
-                  );
-                },
+              child: _buildBackdropSurface(
+                blurEnabledListenable: AppBackgroundSettings.panelBlurEnabled,
+                blurStrengthListenable: AppBackgroundSettings.panelBlurStrength,
               ),
             ),
             Column(
@@ -1040,9 +1081,8 @@ class _PlaylistSheetState extends State<_PlaylistSheet> {
                                 return AnimatedBuilder(
                                   animation: animation,
                                   builder: (context, child) {
-                                    final animValue = Curves.easeInOut.transform(
-                                      animation.value,
-                                    );
+                                    final animValue = Curves.easeInOut
+                                        .transform(animation.value);
                                     final elevation = ui.lerpDouble(
                                       0,
                                       6,
@@ -1066,10 +1106,7 @@ class _PlaylistSheetState extends State<_PlaylistSheet> {
                               // 处于 Watch.builder 内会被包装成 SignalEffectException）。
                               onReorderItem: (oldIndex, newIndex) {
                                 if (mode == PlaybackMode.shuffle) return;
-                                widget.player.reorderQueue(
-                                  oldIndex,
-                                  newIndex,
-                                );
+                                widget.player.reorderQueue(oldIndex, newIndex);
                               },
                               itemCount: total,
                               itemBuilder: (context, index) {
@@ -1090,11 +1127,10 @@ class _PlaylistSheetState extends State<_PlaylistSheet> {
                                     accent: scheme.primary,
                                     textColor: textColor,
                                     secondaryTextColor: secondaryTextColor,
-                                    onTap: () => widget.player.skipToIndex(
-                                      index,
-                                    ),
-                                    onRemove: () => widget.player
-                                        .removeFromQueue(index),
+                                    onTap: () =>
+                                        widget.player.skipToIndex(index),
+                                    onRemove: () =>
+                                        widget.player.removeFromQueue(index),
                                   ),
                                 );
                               },
@@ -1282,74 +1318,91 @@ class _QueueItem extends StatelessWidget {
         ? '未知歌手'
         : song.artistDisplayName;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      child: Material(
-        color: isCurrent ? accent.withValues(alpha: 0.13) : Colors.transparent,
+    // 当前播放行：玻璃开启时用原生玻璃面做行高亮（替代实色 accent 罩），
+    // 队列里只有这一行有平台视图，其余行保持透明 Material。
+    final Widget row = Material(
+      color: isCurrent ? accent.withValues(alpha: 0.13) : Colors.transparent,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(8, 5, 4, 5),
-            child: Row(
-              children: [
-                _buildCover(),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        song.title.trim().isEmpty ? '未知歌曲' : song.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: titleColor,
-                          fontSize: 15,
-                          fontWeight: isCurrent
-                              ? FontWeight.w700
-                              : FontWeight.w600,
-                        ),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 5, 4, 5),
+          child: Row(
+            children: [
+              _buildCover(),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      song.title.trim().isEmpty ? '未知歌曲' : song.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: titleColor,
+                        fontSize: 15,
+                        fontWeight: isCurrent
+                            ? FontWeight.w700
+                            : FontWeight.w600,
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        artist,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: artistColor, fontSize: 12),
-                      ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      artist,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: artistColor, fontSize: 12),
+                    ),
+                  ],
                 ),
-                if (canDelete)
-                  IconButton(
-                    visualDensity: VisualDensity.compact,
-                    icon: Icon(
-                      Icons.close_rounded,
-                      color: secondaryTextColor.withValues(alpha: 0.8),
+              ),
+              if (canDelete)
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  icon: Icon(
+                    Icons.close_rounded,
+                    color: secondaryTextColor.withValues(alpha: 0.8),
+                    size: 20,
+                  ),
+                  onPressed: onRemove,
+                ),
+              if (canReorder)
+                ReorderableDelayedDragStartListener(
+                  index: index,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Icon(
+                      Icons.drag_handle_rounded,
+                      color: secondaryTextColor.withValues(alpha: 0.55),
                       size: 20,
                     ),
-                    onPressed: onRemove,
                   ),
-                if (canReorder)
-                  ReorderableDelayedDragStartListener(
-                    index: index,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: Icon(
-                        Icons.drag_handle_rounded,
-                        color: secondaryTextColor.withValues(alpha: 0.55),
-                        size: 20,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
+                ),
+            ],
           ),
         ),
       ),
+    );
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      child: !isCurrent
+          ? row
+          : GlassGate(
+              original: row,
+              glass: Stack(
+                children: [
+                  const Positioned.fill(
+                    child: NativeGlassSurface(borderRadius: 12),
+                  ),
+                  // Stack 给非 positioned 子项宽松约束，需撑满宽度避免
+                  // 行内容收缩贴左（与首页卡片同款处理）。
+                  SizedBox(width: double.infinity, child: row),
+                ],
+              ),
+            ),
     );
   }
 
@@ -1408,15 +1461,15 @@ class _QueueLimitDialog extends StatelessWidget {
                 const SizedBox(height: 8),
                 Slider(
                   value: limit.toDouble().clamp(
-                        AppPlaybackQueueSettings.minQueueLimit.toDouble(),
-                        AppPlaybackQueueSettings.maxQueueLimit.toDouble(),
-                      ),
+                    AppPlaybackQueueSettings.minQueueLimit.toDouble(),
+                    AppPlaybackQueueSettings.maxQueueLimit.toDouble(),
+                  ),
                   min: AppPlaybackQueueSettings.minQueueLimit.toDouble(),
                   max: AppPlaybackQueueSettings.maxQueueLimit.toDouble(),
                   divisions:
                       (AppPlaybackQueueSettings.maxQueueLimit -
-                              AppPlaybackQueueSettings.minQueueLimit) ~/
-                          10,
+                          AppPlaybackQueueSettings.minQueueLimit) ~/
+                      10,
                   label: '$limit 首',
                   onChanged: (value) {
                     AppPlaybackQueueSettings.setMaxQueueLength(value.round());

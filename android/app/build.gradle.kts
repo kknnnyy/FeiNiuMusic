@@ -141,6 +141,16 @@ dependencies {
     // api 自带 rikka.sui.Sui（"API of Shizuku and Sui"），无需单独引入 sui。
     implementation("dev.rikka.shizuku:api:13.1.5")
     implementation("dev.rikka.shizuku:provider:13.1.5")
+    // 原生液态玻璃（QWEA0/Liquid-Glass-Android，JitPack 分发）：Android 平台
+    // 用它替代 liquid_glass_widgets 渲染玻璃面（API 33+ AGSL 透镜管线，
+    // API 24-32 自动降级经典 CPU 管线；minSdk 24 低于本工程 27，范围不变）。
+    implementation("com.github.QWEA0:liquidglass:v2.0.11")
+}
+
+// JitPack：liquidglass 依赖的唯一来源（settings.gradle.kts 未做
+// dependencyResolutionManagement，模块级仓库在默认 PREFER_PROJECT 模式下生效）。
+repositories {
+    maven("https://jitpack.io")
 }
 
 flutter {

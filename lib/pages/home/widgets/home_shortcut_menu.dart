@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../../app/state/settings_layout_state.dart';
 import '../../../app/tv/tv_layout.dart';
+import '../../../components/common/glass_gate.dart';
+import '../../../components/common/native_liquid_glass.dart';
 
 /// 首页功能入口卡片数据
 class HomeShortcutItem {
@@ -88,44 +90,65 @@ class _ShortcutItem extends StatelessWidget {
         ? TvLayout.uiScale(context)
         : 1.0;
     final iconSize = 44.0 * scale;
+    // 卡片内容层（玻璃分支与原分支共用）。
+    final content = Padding(
+      padding: EdgeInsets.symmetric(vertical: 12 * scale),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // 圆形图标容器
+          Container(
+            width: iconSize,
+            height: iconSize,
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(item.icon, size: iconSize * 0.5, color: accent),
+          ),
+          SizedBox(height: 6 * scale),
+          Text(
+            item.label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12 * scale,
+              fontWeight: FontWeight.w600,
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
     // 四宫格项是 Material + InkWell：本身可聚焦（Material 自带焦点环 +
     // 主题 focusColor 高亮），聚焦范围即完整卡片。不再包 TvFocusable
     // 缩放/描边，避免聚焦范围只剩图标一小块、右侧空白。
-    return Material(
-      color: scheme.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
+    return GlassGate(
+      original: Material(
+        color: scheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(16),
-        onTap: item.onTap,
-        child: Padding(
-          padding: EdgeInsets.symmetric(vertical: 12 * scale),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // 圆形图标容器
-              Container(
-                width: iconSize,
-                height: iconSize,
-                decoration: BoxDecoration(
-                  color: accent.withValues(alpha: 0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(item.icon, size: iconSize * 0.5, color: accent),
-              ),
-              SizedBox(height: 6 * scale),
-              Text(
-                item.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 12 * scale,
-                  fontWeight: FontWeight.w600,
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: item.onTap,
+          child: content,
         ),
+      ),
+      // 玻璃变体：原生玻璃背景 + 内容层（玻璃面不参与命中，触摸落在
+      // 内容层的 InkWell 上）。内容层 SizedBox 撑满宽度：Stack 给非
+      // positioned 子项的是宽松约束，Material 会收缩到内容宽度导致内容
+      // 贴左不居中（原分支 Material 被 Expanded 拉满宽度）。
+      glass: Stack(
+        children: [
+          const Positioned.fill(child: NativeGlassSurface(borderRadius: 16)),
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: item.onTap,
+              child: SizedBox(width: double.infinity, child: content),
+            ),
+          ),
+        ],
       ),
     );
   }

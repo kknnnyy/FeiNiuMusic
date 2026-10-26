@@ -15,11 +15,9 @@ import 'settings_layout_state.dart';
 /// 默认关闭；老用户保留自己的选择。开启后可调 [glassBlurStrength] /
 /// [glassThickness] 等参数。
 class AppGlassSettings {
-  static const String _prefsLiquidGlassEnabled =
-      'setting_liquid_glass_enabled';
+  static const String _prefsLiquidGlassEnabled = 'setting_liquid_glass_enabled';
   static const String _prefsGlassBlur = 'setting_liquid_glass_blur';
-  static const String _prefsGlassThickness =
-      'setting_liquid_glass_thickness';
+  static const String _prefsGlassThickness = 'setting_liquid_glass_thickness';
 
   /// 默认开关：仅 Android 13+（API 33+）默认开启，其余平台默认关闭。
   ///
@@ -28,14 +26,16 @@ class AppGlassSettings {
   static bool defaultLiquidGlassEnabled = false;
 
   /// 液体玻璃总开关（Android 13+ 默认开启，其余平台默认关闭）。
-  static final ValueNotifier<bool> liquidGlassEnabled =
-      ValueNotifier(defaultLiquidGlassEnabled);
+  static final ValueNotifier<bool> liquidGlassEnabled = ValueNotifier(
+    defaultLiquidGlassEnabled,
+  );
 
-  /// 玻璃模糊强度（0-16，默认 3 = 与底栏玻璃观感一致的浅模糊）。
+  /// 玻璃模糊强度（0-200，默认 3 = 与底栏玻璃观感一致的浅模糊；200 = 最强）。
+  /// 语义值经幂曲线映射到原生 blurAmount（3 → 0.0625，200 → 1.0）。
   static final ValueNotifier<double> glassBlurStrength = ValueNotifier(3);
 
-  /// 玻璃厚度（0-30，默认 30 = 与底栏玻璃观感一致的深折射）：影响折射强度
-  /// 与边缘高光。
+  /// 玻璃厚度（0-200，默认 30 = 与底栏玻璃观感一致的标准配方；200 ≈ 3 倍
+  /// 折射/斜面上限）：影响折射强度与边缘高光。
   static final ValueNotifier<double> glassThickness = ValueNotifier(30);
 
   /// 生效值：总开关开启 **且** 非 TV 模式。
@@ -61,10 +61,14 @@ class AppGlassSettings {
     final prefs = await SharedPreferences.getInstance();
     liquidGlassEnabled.value =
         prefs.getBool(_prefsLiquidGlassEnabled) ?? defaultLiquidGlassEnabled;
-    glassBlurStrength.value =
-        (prefs.getDouble(_prefsGlassBlur) ?? 3).clamp(0.0, 16.0);
-    glassThickness.value =
-        (prefs.getDouble(_prefsGlassThickness) ?? 30).clamp(0.0, 30.0);
+    glassBlurStrength.value = (prefs.getDouble(_prefsGlassBlur) ?? 3).clamp(
+      0.0,
+      200.0,
+    );
+    glassThickness.value = (prefs.getDouble(_prefsGlassThickness) ?? 30).clamp(
+      0.0,
+      200.0,
+    );
     // 互斥校正：若旧数据两者同时为开（历史版本允许同开），液体玻璃优先——
     // 关闭高斯模糊并持久化，保证重启后仍互斥。
     if (liquidGlassEnabled.value &&
@@ -85,14 +89,14 @@ class AppGlassSettings {
 
   static Future<void> setGlassBlur(double value) async {
     final prefs = await SharedPreferences.getInstance();
-    final next = value.clamp(0.0, 16.0);
+    final next = value.clamp(0.0, 200.0);
     await prefs.setDouble(_prefsGlassBlur, next);
     glassBlurStrength.value = next;
   }
 
   static Future<void> setGlassThickness(double value) async {
     final prefs = await SharedPreferences.getInstance();
-    final next = value.clamp(0.0, 30.0);
+    final next = value.clamp(0.0, 200.0);
     await prefs.setDouble(_prefsGlassThickness, next);
     glassThickness.value = next;
   }

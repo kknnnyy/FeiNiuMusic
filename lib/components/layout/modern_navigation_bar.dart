@@ -9,6 +9,7 @@ import '../../app/state/settings_state.dart';
 import '../../app/theme/app_glass_theme.dart';
 import '../common/app_default_text_style.dart';
 import '../common/glass_gate.dart';
+import '../common/native_liquid_glass.dart';
 
 const _primaryNavigationRoutes = <String>[
   AppRoutes.home,
@@ -105,10 +106,7 @@ class AppNavigationModeBuilder extends StatelessWidget {
 }
 
 class ModernNavigationBar extends StatelessWidget {
-  const ModernNavigationBar({
-    super.key,
-    required this.onTap,
-  });
+  const ModernNavigationBar({super.key, required this.onTap});
 
   /// 底部导航点击回调（导航到对应 tab）。
   final ValueChanged<int> onTap;
@@ -168,50 +166,53 @@ class ModernNavigationBar extends StatelessWidget {
                 ? AppBackgroundSettings.panelBlurStrength.value
                 : 0.0;
             final isBlurred = blurStrength > 0;
-        final barColor = isBlurred
-            ? (isDark
-                ? Colors.black.withValues(alpha: 0.06)
-                : Colors.white.withValues(alpha: 0.04))
-            : scheme.surface.withValues(alpha: 0.85);
-        Widget navBar = Material(
-          color: barColor,
-          elevation: 0,
-          child: SafeArea(
-            top: false,
-            child: SizedBox(
-              // 非玻璃分支高度独立于玻璃胶囊（kSolidNavHeight，比玻璃槽位
-              // modernNavHeight=84 矮）。底部安全区由 SafeArea 计入，不含在此值。
-              height: kSolidNavHeight,
-              child: Row(
-                children: List.generate(_labels.length, (index) {
-                  final selected = currentIndex == index;
-                  return Expanded(
-                    child: _NavItem(
-                      icon: _icons[index],
-                      label: _labels[index],
-                      selected: selected,
-                      onTap: () => onTap(index),
+            final barColor = isBlurred
+                ? (isDark
+                      ? Colors.black.withValues(alpha: 0.06)
+                      : Colors.white.withValues(alpha: 0.04))
+                : scheme.surface.withValues(alpha: 0.85);
+            Widget navBar = Material(
+              color: barColor,
+              elevation: 0,
+              child: SafeArea(
+                top: false,
+                child: SizedBox(
+                  // 非玻璃分支高度独立于玻璃胶囊（kSolidNavHeight，比玻璃槽位
+                  // modernNavHeight=84 矮）。底部安全区由 SafeArea 计入，不含在此值。
+                  height: kSolidNavHeight,
+                  child: Row(
+                    children: List.generate(_labels.length, (index) {
+                      final selected = currentIndex == index;
+                      return Expanded(
+                        child: _NavItem(
+                          icon: _icons[index],
+                          label: _labels[index],
+                          selected: selected,
+                          onTap: () => onTap(index),
+                        ),
+                      );
+                    }),
+                  ),
+                ),
+              ),
+            );
+            // 启用高斯模糊时包裹 BackdropFilter。
+            // RepaintBoundary 隔离模糊合成图层：页面切换转场期间底层内容变化时，
+            // 模糊结果被图层缓存复用，避免逐帧全屏重采样造成掉帧。
+            if (blurStrength > 0) {
+              navBar = ClipRect(
+                child: RepaintBoundary(
+                  child: BackdropFilter(
+                    filter: ui.ImageFilter.blur(
+                      sigmaX: blurStrength,
+                      sigmaY: blurStrength,
                     ),
-                  );
-                }),
-              ),
-            ),
-          ),
-        );
-        // 启用高斯模糊时包裹 BackdropFilter。
-        // RepaintBoundary 隔离模糊合成图层：页面切换转场期间底层内容变化时，
-        // 模糊结果被图层缓存复用，避免逐帧全屏重采样造成掉帧。
-        if (blurStrength > 0) {
-          navBar = ClipRect(
-            child: RepaintBoundary(
-              child: BackdropFilter(
-                filter: ui.ImageFilter.blur(sigmaX: blurStrength, sigmaY: blurStrength),
-                child: navBar,
-              ),
-            ),
-          );
-        }
-        return navBar;
+                    child: navBar,
+                  ),
+                ),
+              );
+            }
+            return navBar;
           },
         );
       },
@@ -220,32 +221,64 @@ class ModernNavigationBar extends StatelessWidget {
 
   /// 液体玻璃变体：iOS 26 风格浮动玻璃胶囊底部导航。
   ///
-  /// 大体沿用包内置 demo 的参考配置（见 liquid_glass_widgets example.dart）：
-  /// 实心 SF Symbols 图标（CupertinoIcons）+ 图标/文字着色走包默认（label 色），
-  /// 只显式补一个 [GlassTabBar.indicatorColor]（10% label 灰）——MaterialApp
-  /// 下包默认的动态色解析可能让选中胶囊不可见，显式指定后与 CupertinoApp 里
-  /// demo 的克制浅灰胶囊观感一致。
-  ///
-  /// 尺寸：胶囊 56 + 上下悬浮空隙 14×2 = 84，正好等于
-  /// [AppPageScaffold.modernNavHeight]，槽位/迷你播放器抬升/滚动留白数学零改动。
-  /// 胶囊无内部 SafeArea，外层补 `SafeArea(top: false)` 悬浮在 Home 指示条上方。
+  /// Android 直接使用框架自带的 [NativeLiquidGlassTabBar]（LiquidGlassTabBar）：
+  /// 整条胶囊即玻璃，选中指示是一颗真实玻璃滴（折射标签行内容、过冲弹性
+  /// 滑动 + 液态拉伸、可拖拽），触摸由原生组件消费后经通道回传切换。
+  /// 尺寸：原生栏高约 63dp（4dp 内边距 + 26dp 图标 + 标签行），放在
+  /// [AppPageScaffold.modernNavHeight]（84）槽位中垂直居中，左右悬浮 20dp，
+  /// 与 GlassTabBar.bottom 路径的悬浮几何一致。
+  /// 其余平台沿用 liquid_glass_widgets 的 [GlassTabBar.bottom]。
   Widget _buildGlass(BuildContext context, int index) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     // 选中胶囊色：与包内置 demo（CupertinoApp）一致 —— label 色 10% 半透明。
-    // MaterialApp 下没有显式 CupertinoTheme，包默认的动态色 .withValues 可能
-    // 解析出不可见的胶囊，这里显式按明暗取 10% 黑/白，保证亮暗都清晰可见。
     final pillColor = isDark
         ? Colors.white.withValues(alpha: 0.10)
         : Colors.black.withValues(alpha: 0.10);
+    if (NativeLiquidGlassTabBar.supported) {
+      return SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: SizedBox(
+            height: kGlassNavPillTopGap * 2 + 56,
+            child: Center(
+              child: SizedBox(
+                height: 63,
+                // 玻璃参数跟随设置页滑条（模糊强度/折射厚度）实时变化；
+                // CLEAR 材质 = iOS 26 "Clear"（高透 + 固定压暗层，最通透）。
+                child: ValueListenableBuilder<double>(
+                  valueListenable: AppGlassSettings.glassBlurStrength,
+                  builder: (context, blur, _) => ValueListenableBuilder<double>(
+                    valueListenable: AppGlassSettings.glassThickness,
+                    builder: (context, thickness, _) => NativeLiquidGlassTabBar(
+                      titles: _labels,
+                      icons: const [
+                        'home',
+                        'library',
+                        'music',
+                        'heart',
+                        'person',
+                      ],
+                      selectedIndex: index,
+                      onSelected: onTap,
+                      blur: blur,
+                      thickness: thickness,
+                      material: 'clear',
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     return SafeArea(
       top: false,
       child: GlassTabBar.bottom(
         tabs: [
           for (var i = 0; i < _labels.length; i++)
-            GlassTab(
-              icon: Icon(_glassIcons[i]),
-              label: _labels[i],
-            ),
+            GlassTab(icon: Icon(_glassIcons[i]), label: _labels[i]),
         ],
         selectedIndex: index,
         onTabSelected: onTap,

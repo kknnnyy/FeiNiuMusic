@@ -25,6 +25,7 @@ import io.github.proify.lyricon.lyric.model.RichLyricLine
 import io.github.proify.lyricon.lyric.model.Song
 import io.github.proify.lyricon.provider.LyriconFactory
 import io.github.proify.lyricon.provider.LyriconProvider
+import com.feiniu.music.glass.FeiNiuLiquidGlass
 import com.feiniu.music.island.IslandLyricNotification
 import com.feiniu.music.island.shizuku.ShizukuManager
 import com.feiniu.music.track_change.OverlayTrackChange
@@ -67,6 +68,10 @@ class MainActivity : AudioServiceActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        // 原生液态玻璃平台视图（QWEA0/Liquid-Glass-Android）：注册视图工厂 +
+        // 参数更新通道，Android 平台玻璃面（迷你播放器/底栏）走原生渲染。
+        FeiNiuLiquidGlass.setup(flutterEngine, flutterEngine.dartExecutor.binaryMessenger)
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,

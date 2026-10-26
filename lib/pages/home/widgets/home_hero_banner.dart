@@ -5,6 +5,8 @@ import '../../../app/services/feiniu/api_client.dart';
 import '../../../app/state/settings_layout_state.dart';
 import '../../../app/state/song_state.dart';
 import '../../../app/tv/tv_layout.dart';
+import '../../../components/common/glass_gate.dart';
+import '../../../components/common/native_liquid_glass.dart';
 import '../../../components/focus/tv_focusable.dart';
 
 /// 首页顶部 100% 宽 Hero Banner。
@@ -49,6 +51,57 @@ class HomeHeroBanner extends StatelessWidget {
     final scale = isTv ? TvLayout.uiScale(context) : 1.0;
     final isTablet = AppLayoutSettings.effectiveTabletMode && !isTv;
     final useLarge = isTv || isTablet;
+    // 标签胶囊内容（玻璃分支与原分支共用同一内容层）。
+    final labelContent = Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: 10 * scale,
+        vertical: 4 * scale,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.auto_awesome_rounded,
+            size: 13 * scale,
+            color: Colors.white.withValues(alpha: 0.9),
+          ),
+          SizedBox(width: 5 * scale),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 11 * scale,
+                fontWeight: FontWeight.w600,
+                color: Colors.white.withValues(alpha: 0.92),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    final Widget labelChip = GlassGate(
+      original: Container(
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.32),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.25),
+            width: 0.6,
+          ),
+        ),
+        child: labelContent,
+      ),
+      // 玻璃变体：原生玻璃胶囊（全胶囊形状）+ 内容层，实色底/描边由玻璃
+      // 自身高光与压暗层替代。
+      glass: Stack(
+        children: [
+          const Positioned.fill(child: NativeGlassSurface(borderRadius: 999)),
+          labelContent,
+        ],
+      ),
+    );
     final bannerStack = Stack(
       fit: StackFit.expand,
       children: [
@@ -85,46 +138,7 @@ class HomeHeroBanner extends StatelessWidget {
           left: 16 * scale,
           top: 14 * scale,
           right: (onRefresh != null ? 60 : 16) * scale,
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: Container(
-              padding: EdgeInsets.symmetric(
-                horizontal: 10 * scale,
-                vertical: 4 * scale,
-              ),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.32),
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.25),
-                  width: 0.6,
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.auto_awesome_rounded,
-                    size: 13 * scale,
-                    color: Colors.white.withValues(alpha: 0.9),
-                  ),
-                  SizedBox(width: 5 * scale),
-                  Flexible(
-                    child: Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 11 * scale,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white.withValues(alpha: 0.92),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+          child: Align(alignment: Alignment.centerLeft, child: labelChip),
         ),
 
         // 右上角换一首按钮
@@ -221,6 +235,9 @@ class HomeHeroBanner extends StatelessWidget {
 }
 
 /// 播放按钮：Material 自身已可聚焦（主题 focusColor 染出焦点）。
+///
+/// 玻璃模式：白色圆形玻璃面 + 白色图标（iOS 26 清晰玻璃按钮配方），
+/// 原分支保持白底 + 主题色图标。
 class _TvPlayButton extends StatelessWidget {
   final VoidCallback onPlay;
   final Color primary;
@@ -232,30 +249,56 @@ class _TvPlayButton extends StatelessWidget {
     final scale = AppLayoutSettings.tvMode.value
         ? TvLayout.uiScale(context)
         : 1.0;
-    return Container(
-      width: 56 * scale,
-      height: 56 * scale,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.25),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+    final size = 56.0 * scale;
+    return GlassGate(
+      original: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.25),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: onPlay,
+            child: Icon(
+              Icons.play_arrow_rounded,
+              color: primary,
+              size: 36 * scale,
+            ),
           ),
-        ],
+        ),
       ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: onPlay,
-          child: Icon(
-            Icons.play_arrow_rounded,
-            color: primary,
-            size: 36 * scale,
-          ),
+      glass: SizedBox(
+        width: size,
+        height: size,
+        child: Stack(
+          children: [
+            const Positioned.fill(child: NativeGlassSurface(borderRadius: 999)),
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: onPlay,
+                child: Center(
+                  child: Icon(
+                    Icons.play_arrow_rounded,
+                    color: Colors.white.withValues(alpha: 0.95),
+                    size: 36 * scale,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -273,20 +316,36 @@ class _TvRefreshButton extends StatelessWidget {
     final scale = AppLayoutSettings.tvMode.value
         ? TvLayout.uiScale(context)
         : 1.0;
-    return Material(
-      color: Colors.black.withValues(alpha: 0.32),
-      shape: const CircleBorder(),
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onRefresh,
-        child: Padding(
-          padding: EdgeInsets.all(8 * scale),
-          child: Icon(
-            Icons.refresh_rounded,
-            size: 20 * scale,
-            color: Colors.white.withValues(alpha: 0.9),
-          ),
+    final icon = Padding(
+      padding: EdgeInsets.all(8 * scale),
+      child: Icon(
+        Icons.refresh_rounded,
+        size: 20 * scale,
+        color: Colors.white.withValues(alpha: 0.9),
+      ),
+    );
+    return GlassGate(
+      original: Material(
+        color: Colors.black.withValues(alpha: 0.32),
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onRefresh,
+          child: icon,
         ),
+      ),
+      glass: Stack(
+        children: [
+          const Positioned.fill(child: NativeGlassSurface(borderRadius: 999)),
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: onRefresh,
+              child: icon,
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -663,11 +663,11 @@ class _AppAppearanceSettingsPageState extends State<AppAppearanceSettingsPage> {
                         builder: (context, value, _) {
                           return AppSettingSlider(
                             title: '玻璃模糊强度',
-                            description: '0 = 无模糊，16 = 最强模糊',
+                            description: '0 = 无模糊，200 = 最强模糊',
                             value: value,
                             min: 0,
-                            max: 16,
-                            divisions: 16,
+                            max: 200,
+                            divisions: 200,
                             valueText: value == 0
                                 ? '关闭'
                                 : value.toStringAsFixed(0),
@@ -683,11 +683,11 @@ class _AppAppearanceSettingsPageState extends State<AppAppearanceSettingsPage> {
                         builder: (context, value, _) {
                           return AppSettingSlider(
                             title: '玻璃厚度',
-                            description: '影响折射强度与边缘高光',
+                            description: '影响折射强度与边缘高光（30 = 标准）',
                             value: value,
                             min: 0,
-                            max: 30,
-                            divisions: 30,
+                            max: 200,
+                            divisions: 200,
                             valueText: value.toStringAsFixed(0),
                             onChanged: (next) {
                               AppGlassSettings.setGlassThickness(next);
