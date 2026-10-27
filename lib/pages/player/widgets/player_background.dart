@@ -143,10 +143,15 @@ class PlayerBackground extends StatefulWidget {
   /// the sample cover shown there rather than whatever song is playing.
   final Color? dominantColor;
 
+  /// 恒用静态柔和渐变（跳过极光/blob 动效层）。歌词页复刻参考效果时
+  /// 背景需保持纯净（参考 APK 无背景动效）。
+  final bool staticGradient;
+
   const PlayerBackground({
     super.key,
     required this.songSignal,
     this.dominantColor,
+    this.staticGradient = false,
   });
 
   @override
@@ -230,7 +235,7 @@ class _PlayerBackgroundState extends State<PlayerBackground> {
             final dominant =
                 widget.dominantColor ?? _dominantColor ?? scheme.primary;
             final baseColor = _adjustBackground(dominant, preferLight);
-            if (dynamicEnabled) {
+            if (dynamicEnabled && !widget.staticGradient) {
               return _DynamicGradientBackground(
                 baseColor: baseColor,
                 saturation: saturation,
@@ -378,11 +383,13 @@ Color _adjustBackground(Color color, bool preferLightBackground) {
       lightness = 0.92;
     }
   } else {
-    if (lightness > 0.32) {
-      lightness = 0.32;
+    // 参考 APK 播放页背景明显更暗（白字对比强、无泛白观感）：
+    // 亮度上限 0.32 → 0.26。
+    if (lightness > 0.26) {
+      lightness = 0.26;
     }
-    if (lightness < 0.18) {
-      lightness = 0.18;
+    if (lightness < 0.14) {
+      lightness = 0.14;
     }
   }
   return hsl.withLightness(lightness).toColor();
@@ -432,12 +439,13 @@ class _DynamicGradientBackground extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return switch (defaultTargetPlatform) {
-      TargetPlatform.macOS || TargetPlatform.windows || TargetPlatform.linux =>
-        _TextureGradientBackground(
-          baseColor: baseColor,
-          saturation: saturation,
-          hueShift: hueShift,
-        ),
+      TargetPlatform.macOS ||
+      TargetPlatform.windows ||
+      TargetPlatform.linux => _TextureGradientBackground(
+        baseColor: baseColor,
+        saturation: saturation,
+        hueShift: hueShift,
+      ),
       _ => _VectorGradientBackground(
         baseColor: baseColor,
         saturation: saturation,

@@ -75,6 +75,23 @@ object FeiNiuLiquidGlass {
         views.remove(viewId)
     }
 
+    /**
+     * 采集背景期间隐藏所有玻璃平台视图（含采集发起者自身）：保证采到纯
+     * Flutter 内容、避免把效果层画进采集内容形成反馈回路。
+     * 仅主线程调用（View 绘制回调都在主线程）。
+     */
+    fun <T> withGlassViewsHidden(block: () -> T): T {
+        val hidden = views.values
+            .mapNotNull { (it as? PlatformView)?.getView() }
+            .filter { it.isShown }
+        hidden.forEach { it.visibility = View.INVISIBLE }
+        return try {
+            block()
+        } finally {
+            hidden.forEach { it.visibility = View.VISIBLE }
+        }
+    }
+
     /** 原生组件 → Dart 回调（底栏切换）。 */
     fun notifyTabSelected(viewId: Int, index: Int) {
         if (::channel.isInitialized) {
@@ -242,6 +259,8 @@ internal fun applyGlassParams(view: LiquidGlassView, params: Map<*, *>, density:
     view.bevelWidth = ((24f * density) * scale).coerceAtLeast(2f)
     view.dispersionStrength = 0.12f
     view.enableSensorHighlight = true
+    // 注意：enableAdaptiveTint/enableDynamicBackground 不能关闭——实测关闭后
+    // libhwui computeClipAndTransformImpl 无限递归栈溢出闪退，必须保持 true。
     view.enableAdaptiveTint = true
     view.enableDynamicBackground = true
 }

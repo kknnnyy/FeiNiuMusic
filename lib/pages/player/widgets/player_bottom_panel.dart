@@ -668,29 +668,60 @@ class _PlayerSheetView extends StatelessWidget {
         borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
         child: Stack(
           children: [
-            PlayerBackground(songSignal: player.currentSongSignal),
+            // 背景面：液体玻璃开启 → 轻雾 BackdropFilter（低强度模糊 +
+            // 18% 面板色），并且不画弹层自带的 PlayerBackground——否则
+            // 玻璃透出的永远是弹层自己的专辑背景（「怎么调都不透明」的
+            // 根因），此时轻雾直接透出弹层后面的页面，实现真正通透。
+            // 关闭玻璃 → 原方案（PlayerBackground + BackdropFilter 按
+            // 开关/强度叠加遮罩）。
             RepaintBoundary(
-              child: ValueListenableBuilder<bool>(
-                valueListenable: AppBackgroundSettings.panelBlurEnabled,
-                builder: (context, blurEnabled, _) {
-                  return ValueListenableBuilder<double>(
-                    valueListenable: AppBackgroundSettings.panelBlurStrength,
-                    builder: (context, blurStrength, _) {
-                      final effective = blurEnabled ? blurStrength : 0.0;
-                      final mask = Container(color: maskColor);
-                      if (effective <= 0) return mask;
-                      return RepaintBoundary(
-                        child: BackdropFilter(
-                          filter: ui.ImageFilter.blur(
-                            sigmaX: effective,
-                            sigmaY: effective,
-                          ),
-                          child: mask,
-                        ),
-                      );
-                    },
-                  );
-                },
+              child: GlassGate(
+                original: Stack(
+                  children: [
+                    PlayerBackground(songSignal: player.currentSongSignal),
+                    ValueListenableBuilder<bool>(
+                      valueListenable: AppBackgroundSettings.panelBlurEnabled,
+                      builder: (context, blurEnabled, _) {
+                        return ValueListenableBuilder<double>(
+                          valueListenable:
+                              AppBackgroundSettings.panelBlurStrength,
+                          builder: (context, blurStrength, _) {
+                            final effective = blurEnabled ? blurStrength : 0.0;
+                            final mask = Container(color: maskColor);
+                            if (effective <= 0) return mask;
+                            return RepaintBoundary(
+                              child: BackdropFilter(
+                                filter: ui.ImageFilter.blur(
+                                  sigmaX: effective,
+                                  sigmaY: effective,
+                                ),
+                                child: mask,
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ],
+                ),
+                // 液态玻璃透明效果：原生 CLEAR 材质，厚度与模糊跟随设置页
+                // 滑条并按整幅大面板重新标定：模糊 ×1.5+50、厚度 ×0.8+30。
+                // 弹层此时不自绘 PlayerBackground，玻璃直接
+                // 叠加在弹层后面的真实页面上。
+                glass: ValueListenableBuilder<double>(
+                  valueListenable: AppGlassSettings.glassThickness,
+                  builder: (context, thickness, _) {
+                    return ValueListenableBuilder<double>(
+                      valueListenable: AppGlassSettings.glassBlurStrength,
+                      builder: (context, blur, _) => NativeLiquidGlass(
+                        borderRadius: 16,
+                        material: 'clear',
+                        blur: (blur * 1.5 + 50).clamp(0, 200).toDouble(),
+                        thickness: (thickness * 1).clamp(0, 200).toDouble(),
+                      ),
+                    );
+                  },
+                ),
               ),
             ),
             Column(
@@ -1006,7 +1037,7 @@ class _PlaylistSheetState extends State<_PlaylistSheet> {
                           if (mode == PlaybackMode.shuffle)
                             Padding(
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
+                                horizontal: 24,
                                 vertical: 6,
                               ),
                               child: Row(
@@ -1143,7 +1174,7 @@ class _PlaylistHeader extends StatelessWidget {
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 8, 8),
+          padding: const EdgeInsets.fromLTRB(24, 4, 16, 8),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
@@ -1232,7 +1263,7 @@ class _PlaylistHeader extends StatelessWidget {
         ),
         Container(
           height: 1,
-          margin: const EdgeInsets.symmetric(horizontal: 12),
+          margin: const EdgeInsets.symmetric(horizontal: 20),
           color: secondaryTextColor.withValues(alpha: 0.18),
         ),
       ],
@@ -1348,7 +1379,7 @@ class _QueueItem extends StatelessWidget {
       ),
     );
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
       child: !isCurrent
           ? row
           : GlassGate(

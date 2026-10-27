@@ -206,7 +206,12 @@ class _PlayerPageState extends State<PlayerPage>
           },
           child: Stack(
             children: [
-              PlayerBackground(songSignal: _player.currentSongSignal),
+              // 参考 APK：播放页背景为封面取色的纯净静态渐变，
+              // 不叠加极光/blob 背景动效。
+              PlayerBackground(
+                songSignal: _player.currentSongSignal,
+                staticGradient: true,
+              ),
               PlayerTheme(
                 child: ValueListenableBuilder<PlayerStylePreset>(
                   valueListenable: PlayerStyleSettings.stylePreset,
@@ -412,10 +417,15 @@ class _MobilePlayerLayout extends StatelessWidget {
     return Column(
       children: [
         Expanded(
-          child: Center(
-            child: _PlayerArtwork(
-              songSignal: player.currentSongSignal,
-              stylePreset: stylePreset,
+          // 点按封面区域切换到歌词页（与左划等价；底部控件不受影响）。
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onTapLyrics,
+            child: Center(
+              child: _PlayerArtwork(
+                songSignal: player.currentSongSignal,
+                stylePreset: stylePreset,
+              ),
             ),
           ),
         ),
