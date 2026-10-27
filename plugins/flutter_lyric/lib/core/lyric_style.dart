@@ -82,6 +82,23 @@ class LyricStyle {
   /// 上下渐隐范围（上、下）/ Fade range (top, bottom)
   final FadeRange? fadeRange;
 
+  // ==================== 远端虚化 Distance Defocus ====================
+
+  /// 远端虚化强度：距离当前播放行越远，歌词越模糊（单位：逻辑像素 sigma）。
+  /// 0 表示关闭远端虚化。
+  /// Distance-based defocus: the farther a line is from the playing line, the
+  /// blurrier (and fainter) it renders. 0 disables the effect.
+  final double defocusSigma;
+
+  /// 从第几行的行距开始出现虚化 / Line distance where the defocus starts
+  final double defocusStartDistance;
+
+  /// 到第几行的行距达到最大虚化 / Line distance where the defocus reaches max
+  final double defocusEndDistance;
+
+  /// 远端行最低不透明度（0~1）/ Minimum opacity of the farthest lines
+  final double defocusMinOpacity;
+
   // ==================== 滚动动画相关 Scroll Animation ====================
 
   /// 滚动动画时长 / Scroll animation duration
@@ -143,6 +160,10 @@ class LyricStyle {
     this.contentPadding = EdgeInsets.zero,
     required this.selectionAnchorPosition,
     this.fadeRange,
+    this.defocusSigma = 0,
+    this.defocusStartDistance = 0.6,
+    this.defocusEndDistance = 4,
+    this.defocusMinOpacity = 0.15,
     required this.scrollDuration,
     required this.selectionAlignment,
     this.scrollDurations = const {},
@@ -205,6 +226,10 @@ class LyricStyle {
     Object? activeHighlightGradient = _unset,
     bool? activeLineOnly,
     bool? disableTouchEvent,
+    double? defocusSigma,
+    double? defocusStartDistance,
+    double? defocusEndDistance,
+    double? defocusMinOpacity,
   }) {
     return LyricStyle(
       activeHighlightColor: activeHighlightColor == _unset
@@ -254,6 +279,10 @@ class LyricStyle {
           : activeHighlightGradient as LinearGradient?,
       activeLineOnly: activeLineOnly ?? this.activeLineOnly,
       disableTouchEvent: disableTouchEvent ?? this.disableTouchEvent,
+      defocusSigma: defocusSigma ?? this.defocusSigma,
+      defocusStartDistance: defocusStartDistance ?? this.defocusStartDistance,
+      defocusEndDistance: defocusEndDistance ?? this.defocusEndDistance,
+      defocusMinOpacity: defocusMinOpacity ?? this.defocusMinOpacity,
     );
   }
 

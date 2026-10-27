@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_lyric/core/lyric_controller.dart';
 import 'package:flutter_lyric/core/lyric_style.dart';
@@ -59,8 +61,8 @@ class _PlayerLyricsViewState extends State<PlayerLyricsView> with SignalsMixin {
   late final _forceKaraoke = createSignal(false);
   late final _miniEnabled = createSignal(true);
   late final _miniAlignment = createSignal('center');
-  late final _fontSize = createSignal(16.0);
-  late final _activeFontSize = createSignal(20.0);
+  late final _fontSize = createSignal(18.0);
+  late final _activeFontSize = createSignal(24.0);
   late final _fontFamily = createSignal('');
   late final _lineGap = createSignal(14.0);
   late final _alignment = createSignal('center');
@@ -68,6 +70,13 @@ class _PlayerLyricsViewState extends State<PlayerLyricsView> with SignalsMixin {
   late final _activeColorValue = createSignal<int?>(null);
   late final _highlightColorValue = createSignal<int?>(null);
   late final _selectionCentered = createSignal(false);
+
+  /// 拖动歌词（scrub）状态：拖动中完全关闭远端虚化，停止拖动 3s 后恢复。
+  late final _scrubbing = createSignal(false);
+  Timer? _scrubResumeTimer;
+
+  /// 停止拖动后恢复「播放中」虚化状态的延时。
+  static const _scrubResumeDelay = Duration(seconds: 3);
   VoidCallback? _unregisterResumeSelectedLine;
   VoidCallback? _unregisterStopSelection;
   bool _tapSeekEnabled = true;
@@ -84,6 +93,8 @@ class _PlayerLyricsViewState extends State<PlayerLyricsView> with SignalsMixin {
       (_) {
         if (!mounted) return;
         _selectionCentered.value = true;
+        // 拖动已停稳：3s 后回到「播放中」的远端虚化状态。
+        _scheduleScrubResume();
       },
     );
     _unregisterStopSelection = controller.registerEvent(
@@ -102,6 +113,7 @@ class _PlayerLyricsViewState extends State<PlayerLyricsView> with SignalsMixin {
     controller.isSelectingNotifier.removeListener(_onSelectingChange);
     _unregisterResumeSelectedLine?.call();
     _unregisterStopSelection?.call();
+    _scrubResumeTimer?.cancel();
     // 释放全局拖动选中状态：LyricController 是全局单例，若歌词页销毁时
     // 仍处于拖动选中（isSelecting=true / selectedIndex 指向拖到的行），
     // 残留状态会传染给其它共享 controller 的歌词预览（如封面页底栏迷你
@@ -112,12 +124,40 @@ class _PlayerLyricsViewState extends State<PlayerLyricsView> with SignalsMixin {
 
   void _onSelectionIndexChange() {
     _selectionCentered.value = false;
+    // 拖动中（选中行在变）：保持「完全不虚化」，并顺延恢复计时。
+    _scrubbing.value = true;
+    _scheduleScrubResume();
   }
 
   void _onSelectingChange() {
-    if (!LyricsService.instance.controller.isSelectingNotifier.value) {
+    final selecting =
+        LyricsService.instance.controller.isSelectingNotifier.value;
+    if (!selecting) {
       _selectionCentered.value = false;
+      _scrubResumeTimer?.cancel();
+      _scrubbing.value = false;
+      return;
     }
+    // 开始拖动：完全关闭远端虚化（歌词全部锐利），停止拖动 3s 后恢复。
+    _scrubbing.value = true;
+    _scheduleScrubResume();
+  }
+
+  /// 停止拖动 [_scrubResumeDelay] 后恢复「播放中」的远端虚化状态。
+  void _scheduleScrubResume() {
+    _scrubResumeTimer?.cancel();
+    _scrubResumeTimer = Timer(_scrubResumeDelay, () {
+      if (!mounted) return;
+      final controller = LyricsService.instance.controller;
+      // 手指仍在拖动（选中行未停稳）：继续保持不虚化，等下一次「停稳」
+      // 事件重新计时。
+      if (controller.isSelectingNotifier.value &&
+          !_selectionCentered.value) {
+        _scrubbing.value = true;
+        return;
+      }
+      _scrubbing.value = false;
+    });
   }
 
   Future<void> _loadPrefs() async {
@@ -130,8 +170,18 @@ class _PlayerLyricsViewState extends State<PlayerLyricsView> with SignalsMixin {
     _forceKaraoke.value = prefs.getBool(_prefsForceKaraoke) ?? false;
     _miniEnabled.value = prefs.getBool(_prefsMiniEnabled) ?? true;
     _miniAlignment.value = prefs.getString(_prefsMiniAlignment) ?? 'center';
-    _fontSize.value = prefs.getDouble(_prefsFontSize) ?? 16;
-    _activeFontSize.value = prefs.getDouble(_prefsActiveFontSize) ?? 20;
+    _fontSize.value = switch (prefs.getDouble(_prefsFontSize)) {
+      null => 18,
+      // 旧默认 16 迁移为参考 APK 观感的 18（用户显式设置其它值则保留）。
+      16.0 => 18,
+      final v => v,
+    };
+    _activeFontSize.value = switch (prefs.getDouble(_prefsActiveFontSize)) {
+      null => 24,
+      // 旧默认 20 迁移为参考 APK 观感的 24。
+      20.0 => 24,
+      final v => v,
+    };
     _fontFamily.value = prefs.getString(_prefsFontFamily) ?? '';
     _lineGap.value = prefs.getDouble(_prefsLineGap) ?? 14;
     _alignment.value = prefs.getString(_prefsAlignment) ?? 'center';
@@ -564,6 +614,7 @@ class _PlayerLyricsViewState extends State<PlayerLyricsView> with SignalsMixin {
         final model = lyrics.lyricModelSignal.value;
         final selecting = lyrics.isSelectingSignal.value;
         final centered = _selectionCentered.value;
+        final scrubbing = _scrubbing.value;
         final index = lyrics.selectedIndexSignal.value;
         if (dragSeek != _tapSeekEnabled) {
           _tapSeekEnabled = dragSeek;
@@ -689,9 +740,19 @@ class _PlayerLyricsViewState extends State<PlayerLyricsView> with SignalsMixin {
                       ),
                       activeStyle: TextStyle(
                         fontFamily: fontFamily,
-                        color: karaokeMode ? karaokeBaseColor : activeColor,
+                        // karaokeBaseColor 仅在用户显式开启「强制卡拉OK」
+                        // 时使用；自动 karaoke（词级数据）走整行 activeColor
+                        // ——参考 APK 当前行观感即整行纯色常亮，无扫色
+                        // 分界。扫色渐变走 srcIn 全行重涂，会把文字抗锯齿
+                        // 边缘强制涂成实色（笔画外扩发白），是当前行白晕
+                        // 的根因。
+                        color: (forceKaraoke && karaokeMode)
+                            ? karaokeBaseColor
+                            : activeColor,
                         fontSize: activeFontSize,
-                        fontWeight: FontWeight.w700,
+                        // 参考 APK 当前行笔画为中等字重；w700 过粗白字在
+                        // 暗背景上泛光（观感即「笔画周围发白」）。
+                        fontWeight: FontWeight.w600,
                         height: 1.3,
                       ),
                       translationStyle: translationStyle,
@@ -724,7 +785,10 @@ class _PlayerLyricsViewState extends State<PlayerLyricsView> with SignalsMixin {
                           : const Duration(days: 365),
                       disableTouchEvent: !dragLyrics,
                       enableSwitchAnimation: false,
-                      activeHighlightGradient: karaokeMode
+                      // 扫色渐变仅限用户显式开启「强制卡拉OK」：srcIn 全行
+                      // 重涂会破坏文字边缘 alpha（白晕），自动 karaoke 一律
+                      // 整行常亮（对齐参考 APK）。
+                      activeHighlightGradient: (forceKaraoke && karaokeMode)
                           ? LinearGradient(
                               colors: [
                                 highlightColor.withValues(alpha: 1.0),
@@ -733,13 +797,68 @@ class _PlayerLyricsViewState extends State<PlayerLyricsView> with SignalsMixin {
                             )
                           : null,
                       activeHighlightExtraFadeWidth: 0,
+                      // 远端虚化（APK 效果）：按与当前播放行的「行距」逐行
+                      // 变模糊 + 变淡。模糊作用在文字内容本身（插件内
+                      // saveLayer + ImageFilter），不采样页面背景——背景采样
+                      // 会把底色与亮色文字一起重绘成不透明色块，观感即
+                      // 「字体发白、蒙一层白雾」。当前行与相邻行保持锐利。
+                      // 过渡区间放得较宽（2~8 行），远端仍保留 88% 不透明度，
+                      // 只做一点点景深提示，不影响远端歌词的可读性。
+                      // 拖动歌词（scrub）期间完全关闭虚化：歌词全部锐利，
+                      // 停止拖动 3s 后自动回到播放态的虚化效果。
+                      defocusSigma: widget.fadeEdges && !scrubbing ? 1.8 : 0,
+                      defocusStartDistance: 2.0,
+                      defocusEndDistance: 8.0,
+                      defocusMinOpacity: scrubbing ? 1.0 : 0.88,
                     );
                     return Stack(
                       children: [
-                        fl.LyricView(
-                          controller: lyrics.controller,
-                          style: style,
-                        ),
+                        // 参考 APK（飞牛音乐）歌词页「镜头失焦·远端虚化」：
+                        // 当前行整行加粗常亮、锐利；越远离当前行的歌词越模糊、
+                        // 越淡，直到融进背景。逐行虚化由插件内按「行距」实现
+                        // （saveLayer + ImageFilter，只作用于文字内容本身），
+                        // 这里只保留一层很轻的视口边缘渐隐，避免歌词被视口硬切。
+                        // 关键：绝不使用 BackdropFilter / ProgressiveBlur——它
+                        // 采样的是整块背景，会把页面底色与亮色文字一起模糊后
+                        // 以不透明方式重绘回该区域，观感即「字体发白、蒙一层
+                        // 白雾」（本次要修掉的正是这个问题）。
+                        if (widget.fadeEdges)
+                          ShaderMask(
+                            blendMode: BlendMode.dstIn,
+                            shaderCallback: (bounds) {
+                              Color a(double v) =>
+                                  Colors.white.withValues(alpha: v);
+                              return LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  a(0),
+                                  a(0.35),
+                                  a(1),
+                                  a(1),
+                                  a(0.35),
+                                  a(0),
+                                ],
+                                stops: const [
+                                  0.0,
+                                  0.04,
+                                  0.12,
+                                  0.88,
+                                  0.96,
+                                  1.0,
+                                ],
+                              ).createShader(bounds);
+                            },
+                            child: fl.LyricView(
+                              controller: lyrics.controller,
+                              style: style,
+                            ),
+                          )
+                        else
+                          fl.LyricView(
+                            controller: lyrics.controller,
+                            style: style,
+                          ),
                         if (!dragLyrics || !selecting)
                           const SizedBox.shrink()
                         else
@@ -773,7 +892,9 @@ class _PlayerLyricsViewState extends State<PlayerLyricsView> with SignalsMixin {
                                       Expanded(
                                         child: Container(
                                           height: 1,
-                                          color: centered
+                                          // 拖动（scrub）期间隐藏横线，只留时间提示，
+                                          // 避免细线横穿歌词造成视觉干扰。
+                                          color: (scrubbing || centered)
                                               ? Colors.transparent
                                               : onSurface.withValues(
                                                   alpha: 0.25,
@@ -781,6 +902,8 @@ class _PlayerLyricsViewState extends State<PlayerLyricsView> with SignalsMixin {
                                         ),
                                       ),
                                       if (showDetails) const SizedBox(width: 8),
+                                      // 拖动期间保留播放键：它是「从这里播放」的
+                                      // 唯一入口，隐藏后拖动中无法确认/使用。
                                       if (showDetails && dragSeek)
                                         GestureDetector(
                                           behavior: HitTestBehavior.opaque,

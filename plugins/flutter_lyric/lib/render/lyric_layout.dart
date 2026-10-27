@@ -9,6 +9,13 @@ class LyricLayout {
   final double selectionAnchorPosition;
   final double activeAnchorPosition;
 
+  /// 远端虚化用的「渐隐版」TextPainter 缓存 / Cached faded text painters.
+  ///
+  /// 逐行按与播放行的距离降低不透明度；布局在滚动过程中复用，故按
+  /// (行号, 播放行) 缓存，避免逐帧重新排版。
+  final Map<String, TextPainter> _defocusPainters = {};
+  int _defocusPlayIndex = -999999;
+
   LyricLayout copyWith(LyricStyle style) {
     return LyricLayout._internal(
       metrics,
@@ -77,7 +84,10 @@ class LyricLayout {
           style.translationLineGap +
           currentLine.translationHeight / 2;
     } else if (align == MainAxisAlignment.center) {
-      return lh / 2;
+      // 居中锚点应对准「主歌词行」而不是整块（主行+翻译行）：带翻译时若按
+      // 整块居中，主行会被顶到锚点上方，观感即「当前行没对准聚焦带中心」。
+      // 这里让当前主行自身居中，翻译行自然垂在下方。
+      return isHighlight ? activeHeight / 2 : lh / 2;
     }
     return 0;
   }
@@ -103,6 +113,56 @@ class LyricLayout {
       }
     }
     return totalHeight + style.contentPadding.vertical;
+  }
+
+  /// 远端虚化用的「渐隐版」TextPainter / Faded text painter for the defocus.
+  ///
+  /// 只改颜色不透明度，不改字号/字重，因此原有的行度量（词级高亮用的
+  /// LineMetrics）依然有效。
+  TextPainter? defocusPainter({
+    required int index,
+    required int playIndex,
+    required bool isActive,
+    required bool isTranslation,
+    required double opacity,
+  }) {
+    if (index < 0 || index >= metrics.length) return null;
+    if (opacity >= 0.999) return null;
+    if (_defocusPlayIndex != playIndex) {
+      _defocusPainters.clear();
+      _defocusPlayIndex = playIndex;
+    }
+    final key = '$index|$isActive|$isTranslation';
+    final cached = _defocusPainters[key];
+    if (cached != null) return cached;
+    final base = isTranslation
+        ? metrics[index].translationTextPainter
+        : (isActive
+            ? metrics[index].activeTextPainter
+            : metrics[index].textPainter);
+    final span = base.text;
+    if (span is! TextSpan) return null;
+    final baseStyle = span.style;
+    final color = baseStyle?.color;
+    if (baseStyle == null || color == null) return null;
+    final painter = TextPainter(
+      text: TextSpan(
+        text: span.toPlainText(),
+        style: baseStyle.copyWith(
+          color: color.withValues(alpha: color.a * opacity),
+        ),
+      ),
+      textAlign: base.textAlign,
+      textDirection: base.textDirection ?? TextDirection.ltr,
+      maxLines: base.maxLines,
+      ellipsis: base.ellipsis,
+      locale: base.locale,
+      strutStyle: base.strutStyle,
+      textWidthBasis: base.textWidthBasis,
+      textHeightBehavior: base.textHeightBehavior,
+    )..layout(maxWidth: viewSize.width);
+    _defocusPainters[key] = painter;
+    return painter;
   }
 
   LyricLayout._internal(

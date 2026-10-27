@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_lyric/core/lyric_style.dart';
 import 'package:flutter_lyric/widgets/lyric_view.dart';
 
-import '../../../app/services/lyrics/lyrics_service.dart';
-import '../../../app/services/lyrics/lyrics_view_colors.dart';
+import '../../app/services/lyrics/lyrics_service.dart';
+import '../../app/services/lyrics/lyrics_view_colors.dart';
 
 /// 播放页 / 底部控制栏的逐字歌词预览。
 ///
@@ -172,6 +172,14 @@ class LyricPreview extends StatelessWidget {
             ],
           ),
           activeHighlightExtraFadeWidth: 0,
+          // 远端虚化（与歌词详情页同一套效果）：按与当前播放行的「行距」
+          // 逐行变模糊 + 变淡。预览窗口很矮（只有当前行上下各一两句），
+          // 所以过渡区间比歌词页更短，模糊/渐变更集中，能明显看出景深。
+          // 迷你单行歌词（activeLineOnly）不需要虚化。
+          defocusSigma: (fadeEdges && !activeLineOnly) ? 1.2 : 0,
+          defocusStartDistance: 0.5,
+          defocusEndDistance: 3.0,
+          defocusMinOpacity: 0.8,
         );
 
         final preview = ClipRect(
@@ -185,13 +193,14 @@ class LyricPreview extends StatelessWidget {
         }
         // 上下边缘渐隐：歌词行滑出预览区边界时淡出，而非被硬截断。
         // 用 BlendMode.dstIn 让渐变作为透明度遮罩作用在歌词上（背景透明区域
-        // 不受影响），顶部/底部各约 25% 高度从透明过渡到不透明。
+        // 不受影响），顶部/底部各约 15% 高度从透明过渡到不透明——真正的
+        // 「远端渐隐」交给上面按行距的虚化，这里只负责收掉硬边界。
         return ShaderMask(
           blendMode: BlendMode.dstIn,
           shaderCallback: (rect) => LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            stops: const [0.0, 0.25, 0.75, 1.0],
+            stops: const [0.0, 0.05, 0.95, 1.0],
             colors: [
               Colors.transparent,
               Colors.white,

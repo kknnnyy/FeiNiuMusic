@@ -251,20 +251,63 @@ class LyricPainter extends CustomPainter {
           )..layout(maxWidth: size.width))
         : null;
     final painter = selectionPainter ?? basePainter;
+
+    // ===== 远端虚化（参考 APK：越远离当前播放行越模糊、越淡）=====
+    // 模糊只作用于「文字内容」（saveLayer + ImageFilter），绝不采样背景：
+    // 背景采样(BackdropFilter)会把页面底色一起模糊、再以不透明方式重绘回
+    // 该区域，亮色文字被涂抹进底色 → 观感即「字体发白、蒙一层白雾」。
+    // 逐行渐隐通过重建带 alpha 的 TextPainter 实现（布局内按行缓存）。
+    final defocusT = _defocusFactor(index);
+    final defocusSigma = defocusT * style.defocusSigma;
+    final defocusOpacity = 1 - defocusT * (1 - style.defocusMinOpacity);
+    final useDefocus = defocusSigma > 0.01 && !selected;
+
+    final mainPainter = defocusOpacity < 0.999
+        ? (layout.defocusPainter(
+              index: index,
+              playIndex: playIndex,
+              isActive: isActive,
+              isTranslation: false,
+              opacity: defocusOpacity,
+            ) ??
+            painter)
+        : painter;
+
+    final mainHeight = isActive ? metric.activeHeight : metric.height;
+    if (useDefocus) {
+      // 图层范围要盖住模糊扩散的范围，否则模糊会被图层边界裁掉；留足余量
+      // 也避免把选中框（左右各 12px、上下各 8px + 投影）裁出缺口。
+      final pad = 3.0 * defocusSigma + 16.0;
+      canvas.saveLayer(
+        Rect.fromLTWH(
+          -pad,
+          -pad,
+          size.width + 2 * pad,
+          mainHeight +
+              layout.style.translationLineGap +
+              metric.translationHeight +
+              2 * pad,
+        ),
+        Paint()
+          ..imageFilter = ui.ImageFilter.blur(
+            sigmaX: defocusSigma,
+            sigmaY: defocusSigma,
+          ),
+      );
+    }
     canvas.save();
     canvas.translate(calcContentAliginOffset(painter.width, size.width), 0);
     if (_debugLyric) {
       canvas.drawRect(
-          Rect.fromLTWH(0, 0, painter.width, painter.height),
-          Paint()
-            ..color = !isActive
-                ? Colors.blue.withAlpha(50)
-                : Colors.red.withAlpha(50));
+        Rect.fromLTWH(0, 0, painter.width, painter.height),
+        Paint()
+          ..color = !isActive
+              ? Colors.blue.withAlpha(50)
+              : Colors.red.withAlpha(50));
     }
     final switchOffset = handleSwitchAnimation(
         canvas, metric, index, switchState, painter, size);
-    final mainHeight = isActive ? metric.activeHeight : metric.height;
-    if (selected && showSelectionShadow && !_debugLyric) {
+    if (selected && !_debugLyric) {
       final lineHeight = layout.getLineHeight(isActive, index);
       final bgPadX = 12.0;
       final bgPadY = 8.0;
@@ -279,12 +322,16 @@ class LyricPainter extends CustomPainter {
       );
       final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(12));
       final path = Path()..addRRect(rrect);
-      canvas.drawShadow(
-        path,
-        const Color(0xFF000000).withValues(alpha: 0.25),
-        10,
-        false,
-      );
+      // 拖动过程中也要保留「当前歌词的选中框」（填充），否则拖动时当前行
+      // 完全没有视觉锚点；只有投影（阴影）等拖动停稳后再淡入。
+      if (showSelectionShadow) {
+        canvas.drawShadow(
+          path,
+          const Color(0xFF000000).withValues(alpha: 0.25),
+          10,
+          false,
+        );
+      }
       canvas.drawRRect(
         rrect,
         Paint()
@@ -293,13 +340,20 @@ class LyricPainter extends CustomPainter {
       );
     }
 
-    try {
-      painter.paint(canvas, Offset.zero);
-    } catch (_) {}
-    final needHighlight = isActive ||
-        (index == switchState.exitIndex &&
-            switchState.exitAnimationValue < 1 &&
-            style.enableSwitchAnimation);
+    // 参考 APK 技术路线：行内容严格「单遍绘制」。
+    // 旧实现在层外先画一遍文字，进入 saveLayer 后又画一遍再由 drawHighlight
+    // 用 srcIn 上色——两次绘制让抗锯齿边缘 alpha 双重累积（0.5+0.5→~0.75），
+    // 笔画外扩、发胖发白，观感如蒙一层白雾，也是当前行「发白」的根因。
+    // 现在只在需要高亮时进 saveLayer、层内画一次，srcIn 按这一次的文字 alpha
+    // 上色；无高亮时层外画一次。全程文字只被绘制一次。
+    final hasHighlightPaint =
+        layout.style.activeHighlightColor != null ||
+        layout.style.activeHighlightGradient != null;
+    final needHighlight = hasHighlightPaint &&
+        (isActive ||
+            (index == switchState.exitIndex &&
+                switchState.exitAnimationValue < 1 &&
+                style.enableSwitchAnimation));
     if (needHighlight) {
       canvas.saveLayer(
         Rect.fromLTWH(
@@ -311,7 +365,7 @@ class LyricPainter extends CustomPainter {
         Paint(),
       );
       try {
-        painter.paint(canvas, Offset.zero);
+        mainPainter.paint(canvas, Offset.zero);
       } catch (_) {}
       if (isActive) {
         drawHighlight(
@@ -329,6 +383,10 @@ class LyricPainter extends CustomPainter {
         );
       }
       canvas.restore();
+    } else {
+      try {
+        mainPainter.paint(canvas, Offset.zero);
+      } catch (_) {}
     }
     canvas.restore();
     if (metric.line.translation?.isNotEmpty == true) {
@@ -369,7 +427,18 @@ class LyricPainter extends CustomPainter {
               textHeightBehavior: tBasePainter.textHeightBehavior,
             )..layout(maxWidth: size.width))
           : null;
-      final tPainter = tSelectionPainter ?? tActivePainter ?? tBasePainter;
+      final tPainter = tSelectionPainter ??
+          tActivePainter ??
+          (defocusOpacity < 0.999
+              ? (layout.defocusPainter(
+                    index: index,
+                    playIndex: playIndex,
+                    isActive: isActive,
+                    isTranslation: true,
+                    opacity: defocusOpacity,
+                  ) ??
+                  tBasePainter)
+              : tBasePainter);
       canvas.save();
       canvas.translate(calcContentAliginOffset(tPainter.width, size.width), 0);
       canvas.translate(0, switchOffset);
@@ -384,6 +453,25 @@ class LyricPainter extends CustomPainter {
       canvas.translate(0, -switchOffset);
       canvas.restore();
     }
+    if (useDefocus) {
+      canvas.restore();
+    }
+  }
+
+  /// 远端虚化系数：按与当前播放行的「行距」归一化到 0~1。
+  /// 0 = 不虚化（当前行及其近邻），1 = 达到最大虚化。
+  double _defocusFactor(int index) {
+    final s = style;
+    if (s.defocusSigma <= 0) return 0;
+    // 换行动画中的两行正在做位移/缩放，图层边界会裁切它们，暂不虚化。
+    if (index == switchState.enterIndex || index == switchState.exitIndex) {
+      return 0;
+    }
+    final distance = (index - playIndex).abs().toDouble();
+    final start = s.defocusStartDistance;
+    final end = s.defocusEndDistance > start ? s.defocusEndDistance : start + 1;
+    if (distance <= start) return 0;
+    return ((distance - start) / (end - start)).clamp(0.0, 1.0);
   }
 
   double calcContentAliginOffset(double contentWidth, double containerWidth) {
