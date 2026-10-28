@@ -36,7 +36,7 @@ mixin LyricTouchMixin<T extends StatefulWidget>
     stopFlingController();
     _activeResumeDebouncer.dispose();
     _selecteResumeDebouncer.dispose();
-    _isDragging = false;
+    _setDragging(false);
     controller.isSelectingNotifier.value = false;
     dragScrollY = null;
     updateScrollY();
@@ -98,6 +98,16 @@ mixin LyricTouchMixin<T extends StatefulWidget>
 
   var _isDragging = false;
 
+  /// 同步「手指是否正按住歌词拖动」到全局控制器。
+  ///
+  /// 供外部区分「用户手动拖动」与「播放中的自动滚动」——自动滚动不会
+  /// 经过这里，[LyricController.isDraggingNotifier] 始终为 false。
+  void _setDragging(bool value) {
+    if (_isDragging == value) return;
+    _isDragging = value;
+    controller.isDraggingNotifier.value = value;
+  }
+
   scheduleResumeSelectedLine() {
     // 如果播放和选择恢复时间相同，则不进行恢复
     if (style.selectionAutoResumeMode == SelectionAutoResumeMode.neverResume ||
@@ -135,7 +145,7 @@ mixin LyricTouchMixin<T extends StatefulWidget>
         });
       },
       onVerticalDragDown: (details) {
-        _isDragging = true;
+        _setDragging(true);
         stopFlingController();
         _activeResumeDebouncer.dispose();
       },
@@ -150,13 +160,13 @@ mixin LyricTouchMixin<T extends StatefulWidget>
         setDragTranslationY(scrollY - details.delta.dy);
       },
       onVerticalDragCancel: () {
-        _isDragging = false;
+        _setDragging(false);
         _scheduleResumeActiveLine();
       },
       onVerticalDragEnd: (details) {
         _activeResumeDebouncer.dispose();
         _selecteResumeDebouncer.dispose();
-        _isDragging = false;
+        _setDragging(false);
         final velocity = -details.velocity.pixelsPerSecond.dy;
         _flingController.animateWith(
           ClampingScrollSimulation(

@@ -38,6 +38,18 @@ class LyricController {
   final ValueNotifier<double> selectedLineHeightNotifier = ValueNotifier(0);
 
   final ValueNotifier<bool> isSelectingNotifier = ValueNotifier(false);
+
+  /// 用户手指是否正按住歌词拖动。
+  ///
+  /// 与 [isSelectingNotifier] 区分：
+  /// - [isSelectingNotifier]：选中态（含松手后为恢复播放行而保留的一段时间），
+  ///   仅由用户的竖向拖动触发；
+  /// - 本值：严格表示「手指还按在歌词上」，松手即为 false。
+  ///
+  /// 播放中的自动滚动不会置位这两个值，可用于区分「手动拖动」与
+  /// 「正常滚动」。
+  final ValueNotifier<bool> isDraggingNotifier = ValueNotifier(false);
+
   late final ValueNotifier<Duration> progressNotifier =
       ValueNotifier(Duration.zero);
 
@@ -143,5 +155,6 @@ class LyricController {
     selectedIndexNotifier.dispose();
     selectedLineHeightNotifier.dispose();
     isSelectingNotifier.dispose();
+    isDraggingNotifier.dispose();
   }
 }

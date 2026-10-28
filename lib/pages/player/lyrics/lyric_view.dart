@@ -71,12 +71,22 @@ class _PlayerLyricsViewState extends State<PlayerLyricsView> with SignalsMixin {
   late final _highlightColorValue = createSignal<int?>(null);
   late final _selectionCentered = createSignal(false);
 
-  /// 拖动歌词（scrub）状态：拖动中完全关闭远端虚化，停止拖动 3s 后恢复。
+  /// 手动拖动歌词状态：拖动期间完全关闭远端虚化（歌词全部锐利）。
+  ///
+  /// 只由「用户手动拖动歌词」触发（见 [_syncScrubbing]），播放中的自动
+  /// 滚动不会进入该状态，因此播放时远端虚化始终保留。
   late final _scrubbing = createSignal(false);
-  Timer? _scrubResumeTimer;
+  Timer? _releaseResumeTimer;
 
-  /// 停止拖动后恢复「播放中」虚化状态的延时。
-  static const _scrubResumeDelay = Duration(seconds: 3);
+  /// 松手后回到播放行的兜底延时。
+  ///
+  /// 插件自身的回弹依赖 fling 动画结束事件（歌词内容不足以滚动、fling 被
+  /// 提前打断等情况下可能不触发），这里兜底保证**播放中**松手
+  /// [_releaseResumeDelay] 后歌词一定回到播放行并恢复跟随播放进度滚动。
+  ///
+  /// 暂停时不做兜底：按设计暂停中拖动就应停留在拖到的那一行，等用户点
+  /// 播放时再立即回弹（见 [_onPlayingChanged]）。
+  static const _releaseResumeDelay = Duration(seconds: 3);
   VoidCallback? _unregisterResumeSelectedLine;
   VoidCallback? _unregisterStopSelection;
   bool _tapSeekEnabled = true;
@@ -88,13 +98,12 @@ class _PlayerLyricsViewState extends State<PlayerLyricsView> with SignalsMixin {
     final controller = LyricsService.instance.controller;
     controller.selectedIndexNotifier.addListener(_onSelectionIndexChange);
     controller.isSelectingNotifier.addListener(_onSelectingChange);
+    controller.isDraggingNotifier.addListener(_onDraggingChange);
     _unregisterResumeSelectedLine = controller.registerEvent(
       LyricEvent.resumeSelectedLine,
       (_) {
         if (!mounted) return;
         _selectionCentered.value = true;
-        // 拖动已停稳：3s 后回到「播放中」的远端虚化状态。
-        _scheduleScrubResume();
       },
     );
     _unregisterStopSelection = controller.registerEvent(
@@ -104,16 +113,21 @@ class _PlayerLyricsViewState extends State<PlayerLyricsView> with SignalsMixin {
         _selectionCentered.value = false;
       },
     );
+    // 对齐全局拖动态（重建歌词页时可能仍处于拖动选中状态）。
+    _syncScrubbing();
+    PlayerService.instance.isPlaying.addListener(_onPlayingChanged);
   }
 
   @override
   void dispose() {
     final controller = LyricsService.instance.controller;
+    PlayerService.instance.isPlaying.removeListener(_onPlayingChanged);
     controller.selectedIndexNotifier.removeListener(_onSelectionIndexChange);
     controller.isSelectingNotifier.removeListener(_onSelectingChange);
+    controller.isDraggingNotifier.removeListener(_onDraggingChange);
     _unregisterResumeSelectedLine?.call();
     _unregisterStopSelection?.call();
-    _scrubResumeTimer?.cancel();
+    _releaseResumeTimer?.cancel();
     // 释放全局拖动选中状态：LyricController 是全局单例，若歌词页销毁时
     // 仍处于拖动选中（isSelecting=true / selectedIndex 指向拖到的行），
     // 残留状态会传染给其它共享 controller 的歌词预览（如封面页底栏迷你
@@ -123,10 +137,9 @@ class _PlayerLyricsViewState extends State<PlayerLyricsView> with SignalsMixin {
   }
 
   void _onSelectionIndexChange() {
+    // 锚点行变化在播放自动滚动时同样会发生（每唱到新的一行都会变），
+    // 因此这里不能据此判定「用户正在拖动」——否则播放中会误关远端虚化。
     _selectionCentered.value = false;
-    // 拖动中（选中行在变）：保持「完全不虚化」，并顺延恢复计时。
-    _scrubbing.value = true;
-    _scheduleScrubResume();
   }
 
   void _onSelectingChange() {
@@ -134,30 +147,64 @@ class _PlayerLyricsViewState extends State<PlayerLyricsView> with SignalsMixin {
         LyricsService.instance.controller.isSelectingNotifier.value;
     if (!selecting) {
       _selectionCentered.value = false;
-      _scrubResumeTimer?.cancel();
-      _scrubbing.value = false;
-      return;
     }
-    // 开始拖动：完全关闭远端虚化（歌词全部锐利），停止拖动 3s 后恢复。
-    _scrubbing.value = true;
-    _scheduleScrubResume();
+    _syncScrubbing();
   }
 
-  /// 停止拖动 [_scrubResumeDelay] 后恢复「播放中」的远端虚化状态。
-  void _scheduleScrubResume() {
-    _scrubResumeTimer?.cancel();
-    _scrubResumeTimer = Timer(_scrubResumeDelay, () {
+  void _onDraggingChange() {
+    _syncScrubbing();
+    _scheduleReleaseResume();
+  }
+
+  /// 松手后 [_releaseResumeDelay] 若仍未回到播放行，强制回到播放行。
+  ///
+  /// 仅播放中生效：暂停时保持停留在拖到的那一行（且歌词保持锐利不虚化）。
+  void _scheduleReleaseResume() {
+    _releaseResumeTimer?.cancel();
+    final controller = LyricsService.instance.controller;
+    if (controller.isDraggingNotifier.value) return;
+    if (!PlayerService.instance.isPlaying.value) return;
+    _releaseResumeTimer = Timer(_releaseResumeDelay, () {
       if (!mounted) return;
-      final controller = LyricsService.instance.controller;
-      // 手指仍在拖动（选中行未停稳）：继续保持不虚化，等下一次「停稳」
-      // 事件重新计时。
-      if (controller.isSelectingNotifier.value &&
-          !_selectionCentered.value) {
-        _scrubbing.value = true;
-        return;
+      final c = LyricsService.instance.controller;
+      // 已暂停：保持停留在拖到的那一行，等用户点播放再回弹。
+      if (!PlayerService.instance.isPlaying.value) return;
+      // 插件已自行回弹（isSelecting=false）时无需处理。
+      if (c.isSelectingNotifier.value && !c.isDraggingNotifier.value) {
+        c.stopSelection();
       }
-      _scrubbing.value = false;
     });
+  }
+
+  /// 开始播放时，若歌词还停在手动拖动后的位置，立即回到播放行并跟随滚动。
+  ///
+  /// 拖动后的停留由插件的 dragScrollY 维持：只要它非空，歌词就跟着「拖到的
+  /// 那一行」走，播放进度变化也不会把它拉回播放行。这里显式 stopSelection()
+  /// 清空该偏移，让歌词恢复跟随当前播放进度。
+  void _onPlayingChanged() {
+    if (!mounted) return;
+    if (!PlayerService.instance.isPlaying.value) return;
+    final controller = LyricsService.instance.controller;
+    // 正在拖动中不要打断（此时回弹由松手后的兜底计时器负责）。
+    if (controller.isSelectingNotifier.value &&
+        !controller.isDraggingNotifier.value) {
+      controller.stopSelection();
+    }
+  }
+
+  /// 仅在用户手动拖动歌词时关闭远端虚化。
+  ///
+  /// - [LyricController.isDraggingNotifier]：手指正按住歌词滚动；
+  /// - [LyricController.isSelectingNotifier]：选中态（松手后为回弹到播放行
+  ///   仍会保留一小段时间，此时歌词停在拖到的那一行，远端虚化仍以播放行
+  ///   为基准计算，保留虚化会看起来错乱）。
+  ///
+  /// 播放中的自动滚动两个状态都不满足，远端虚化全程保留。
+  void _syncScrubbing() {
+    final controller = LyricsService.instance.controller;
+    _scrubbing.value =
+        controller.isDraggingNotifier.value ||
+        controller.isSelectingNotifier.value;
   }
 
   Future<void> _loadPrefs() async {
@@ -780,6 +827,15 @@ class _PlayerLyricsViewState extends State<PlayerLyricsView> with SignalsMixin {
                       selectionAutoResumeDuration: const Duration(
                         milliseconds: 200,
                       ),
+                      // 拖动歌词后回到播放行的延时。
+                      //
+                      // 播放中：3s 后自动回到播放行并恢复跟随滚动。
+                      // 暂停中：一直停留在拖到的那一行（歌词保持锐利、不虚化），
+                      //   直到用户点播放——此时由 [_onPlayingChanged] 立即回弹。
+                      //
+                      // 注意：拖动后的停留位置由插件的 dragScrollY 维持，只要它
+                      // 非空，歌词就跟着「拖到的那一行」走，播放进度变化也不会
+                      // 把它拉回播放行。
                       activeAutoResumeDuration: isPlaying
                           ? const Duration(seconds: 3)
                           : const Duration(days: 365),
@@ -804,8 +860,8 @@ class _PlayerLyricsViewState extends State<PlayerLyricsView> with SignalsMixin {
                       // 「字体发白、蒙一层白雾」。当前行与相邻行保持锐利。
                       // 过渡区间放得较宽（2~8 行），远端仍保留 88% 不透明度，
                       // 只做一点点景深提示，不影响远端歌词的可读性。
-                      // 拖动歌词（scrub）期间完全关闭虚化：歌词全部锐利，
-                      // 停止拖动 3s 后自动回到播放态的虚化效果。
+                      // 仅在用户手动拖动歌词时完全关闭虚化（歌词全部锐利）；
+                      // 播放中的自动滚动属于正常滚动，虚化保持开启。
                       defocusSigma: widget.fadeEdges && !scrubbing ? 1.8 : 0,
                       defocusStartDistance: 2.0,
                       defocusEndDistance: 8.0,
